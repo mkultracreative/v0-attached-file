@@ -22,20 +22,22 @@ export async function POST() {
 
     /* -------------------------------------------------------
        STEP 1 — Reverse email lookup to get public_identifier
-       Endpoint: /api/v2/profile/resolve/email
-       enrich_profile=no so we ONLY get the identifier, no cached junk
+       Endpoint: GET /api/v2/profile/resolve/email
+       enrich_profile=skip (default) — we only need the identifier
+       Per docs: valid values are "skip" (default) and "enrich"
+       We use "skip" because we chain with Step 2 for live data
        ------------------------------------------------------- */
 
-    const emailParams = new URLSearchParams({
+    const step1Params = new URLSearchParams({
       email: user.email,
       lookup_depth: "deep",
-      enrich_profile: "no",
+      enrich_profile: "skip",
     })
 
     console.log("[v0] Step 1: Email lookup for", user.email)
 
     const emailRes = await fetch(
-      `https://enrichlayer.com/api/v2/profile/resolve/email?${emailParams.toString()}`,
+      `https://enrichlayer.com/api/v2/profile/resolve/email?${step1Params.toString()}`,
       {
         method: "GET",
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -46,7 +48,7 @@ export async function POST() {
       const raw = await emailRes.text()
       console.log("[v0] Step 1 failed:", emailRes.status, raw)
       return NextResponse.json(
-        { error: "Email lookup failed", status: emailRes.status, raw },
+        { error: "Email lookup failed", status: emailRes.status, detail: raw },
         { status: 502 }
       )
     }
@@ -54,16 +56,35 @@ export async function POST() {
     const emailData = await emailRes.json()
     console.log("[v0] Step 1 response keys:", Object.keys(emailData))
 
-    // Extract public_identifier from response
-    const publicIdentifier =
+    // Extract public_identifier — it could be at root or nested
+    // Also try to extract from linkedin_profile_url if present
+    let publicIdentifier =
       emailData?.public_identifier ??
       emailData?.profile?.public_identifier ??
-      emailData?.linkedin_profile_url?.split("/in/")[1]?.replace(/\/$/, "")
+      null
+
+    // Fallback: parse from linkedin_profile_url
+    if (!publicIdentifier) {
+      const linkedinUrl =
+        emailData?.linkedin_profile_url ?? emailData?.profile?.linkedin_profile_url
+      if (linkedinUrl && typeof linkedinUrl === "string") {
+        const match = linkedinUrl.match(/\/in\/([^/]+)\/?/)
+        if (match) {
+          publicIdentifier = match[1]
+        }
+      }
+    }
 
     if (!publicIdentifier) {
-      console.log("[v0] No public_identifier found in:", JSON.stringify(emailData).slice(0, 500))
+      console.log(
+        "[v0] No public_identifier found. Full response:",
+        JSON.stringify(emailData).slice(0, 1000)
+      )
       return NextResponse.json(
-        { error: "Could not resolve LinkedIn profile from email", emailData },
+        {
+          error: "Could not resolve LinkedIn profile from email",
+          detail: emailData,
+        },
         { status: 404 }
       )
     }
@@ -71,16 +92,34 @@ export async function POST() {
     console.log("[v0] Step 1 resolved public_identifier:", publicIdentifier)
 
     /* -------------------------------------------------------
-       STEP 2 — Full Person Profile fetch using linkedin_profile_url
-       Endpoint: /api/v2/profile
-       Chained with the public_identifier from Step 1
-       Uses use_cache=if-present, live_fetch=force for fresh data
+       STEP 2 — Full Person Profile fetch (LIVE, not cached)
+       Endpoint: GET /api/v2/profile
+       Per docs: "chain this API call with the linkedin_profile_url
+       result with the Person Profile Endpoint"
+       
+       We use:
+       - linkedin_profile_url (the only required url — omit twitter/facebook entirely)
+       - extra=include
+       - github_profile_id=include
+       - facebook_profile_id=include
+       - twitter_profile_id=include
+       - personal_contact_number=include
+       - personal_email=include
+       - inferred_salary=include
+       - skills=include
+       - fallback_to_cache=never  (never return stale data)
+       - live_fetch=force          (bypass cache, get live data)
+       
+       NOTE: twitter_profile_url and facebook_profile_url params are
+       OMITTED entirely. Per docs only one of the three URL params
+       is required. Sending empty strings would be treated as real
+       data and could error. Omitting = ignored by the API.
        ------------------------------------------------------- */
 
-    // Small delay between chained calls to be safe
-    await new Promise((resolve) => setTimeout(resolve, 800))
+    // Delay between chained calls to respect rate limits
+    await new Promise((resolve) => setTimeout(resolve, 1000))
 
-    const profileParams = new URLSearchParams({
+    const step2Params = new URLSearchParams({
       linkedin_profile_url: `https://linkedin.com/in/${publicIdentifier}/`,
       extra: "include",
       github_profile_id: "include",
@@ -90,15 +129,14 @@ export async function POST() {
       personal_email: "include",
       inferred_salary: "include",
       skills: "include",
-      use_cache: "if-present",
-      fallback_to_cache: "on-error",
+      fallback_to_cache: "never",
       live_fetch: "force",
     })
 
     console.log("[v0] Step 2: Person Profile fetch for", publicIdentifier)
 
     const profileRes = await fetch(
-      `https://enrichlayer.com/api/v2/profile?${profileParams.toString()}`,
+      `https://enrichlayer.com/api/v2/profile?${step2Params.toString()}`,
       {
         method: "GET",
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -109,60 +147,79 @@ export async function POST() {
       const raw = await profileRes.text()
       console.log("[v0] Step 2 failed:", profileRes.status, raw)
       return NextResponse.json(
-        { error: "Profile fetch failed", status: profileRes.status, raw },
+        {
+          error: "Profile fetch failed",
+          status: profileRes.status,
+          detail: raw,
+        },
         { status: 502 }
       )
     }
 
     const profileData = await profileRes.json()
-    console.log("[v0] Step 2 response keys:", Object.keys(profileData))
+    console.log(
+      "[v0] Step 2 response keys:",
+      Object.keys(profileData),
+      "full_name:",
+      profileData.full_name
+    )
 
     /* -------------------------------------------------------
-       HARD GUARD — reject metadata-only / compatibility payloads
-       A valid profile MUST have full_name or experiences
+       HARD GUARD — reject metadata-only / compatibility notes
+       A real profile will have full_name or first_name or experiences
        ------------------------------------------------------- */
 
     if (
       !profileData ||
       typeof profileData !== "object" ||
       "backwards_compatibility_notes" in profileData ||
-      (!profileData.full_name && !profileData.first_name && !profileData.experiences)
+      (!profileData.full_name &&
+        !profileData.first_name &&
+        !Array.isArray(profileData.experiences))
     ) {
-      console.log("[v0] Invalid payload detected:", JSON.stringify(profileData).slice(0, 500))
+      console.log(
+        "[v0] Invalid payload:",
+        JSON.stringify(profileData).slice(0, 500)
+      )
       return NextResponse.json(
-        { error: "EnrichLayer returned metadata instead of profile data", raw: profileData },
+        {
+          error: "EnrichLayer returned metadata instead of profile data",
+          detail: profileData,
+        },
         { status: 502 }
       )
     }
 
     /* -------------------------------------------------------
-       STEP 3 — Sanitize: strip nulls, inject public_identifier
+       STEP 3 — Sanitize: strip nulls, ensure public_identifier
        ------------------------------------------------------- */
 
     const sanitized = sanitizeProfile(profileData)
-    // Ensure public_identifier is always present
     sanitized.public_identifier = publicIdentifier
 
-    console.log("[v0] Sanitized profile. full_name:", sanitized.full_name, "experiences:", Array.isArray(sanitized.experiences) ? sanitized.experiences.length : 0)
+    console.log(
+      "[v0] Sanitized. full_name:",
+      sanitized.full_name,
+      "experiences:",
+      Array.isArray(sanitized.experiences)
+        ? (sanitized.experiences as unknown[]).length
+        : 0
+    )
 
     /* -------------------------------------------------------
        STEP 4 — Save to Supabase people table
-       Only write to columns that exist in the schema:
-       id, email, resume_content, resume_content_modified, theme_data, plan
        ------------------------------------------------------- */
 
-    const { error: upsertError } = await supabase
-      .from("people")
-      .upsert(
-        {
-          id: user.id,
-          email: user.email,
-          resume_content: sanitized,
-          resume_content_modified: sanitized,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" }
-      )
+    const { error: upsertError } = await supabase.from("people").upsert(
+      {
+        id: user.id,
+        email: user.email,
+        resume_content: sanitized,
+        resume_content_modified: sanitized,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    )
 
     if (upsertError) {
       console.log("[v0] Supabase upsert error:", upsertError)
@@ -172,7 +229,7 @@ export async function POST() {
       )
     }
 
-    console.log("[v0] Profile saved successfully for user:", user.id)
+    console.log("[v0] Profile saved for user:", user.id)
 
     return NextResponse.json({
       success: true,
@@ -188,16 +245,18 @@ export async function POST() {
 }
 
 /**
- * Recursively remove null values from the profile object.
- * Replace null with appropriate defaults (empty string, empty array, etc.)
+ * Recursively strip null/undefined values from the profile.
+ * Arrays keep non-null items. Objects recurse. Primitives pass through.
+ * This prevents "Do not set any values to null" issues downstream.
  */
-function sanitizeProfile(data: Record<string, unknown>): Record<string, unknown> {
+function sanitizeProfile(
+  data: Record<string, unknown>
+): Record<string, unknown> {
   const result: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(data)) {
     if (value === null || value === undefined) {
-      // Skip nulls entirely — don't include them
-      continue
+      continue // omit nulls entirely
     }
 
     if (Array.isArray(value)) {

@@ -3,156 +3,217 @@ import { createClient } from "@/lib/supabase/server"
 
 export async function POST() {
   try {
-      const supabase = await createClient()
-          const {
-                data: { user },
-                    } = await supabase.auth.getUser()
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-                        if (!user || !user.email) {
-                              return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-                                  }
+    if (!user || !user.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
-                                      const apiKey = process.env.ENRICHLAYER_API_KEY
-                                          if (!apiKey) {
-                                                return NextResponse.json({ error: "Missing ENRICHLAYER_API_KEY" }, { status: 500 })
-                                                    }
+    const apiKey = process.env.ENRICHLAYER_API_KEY
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Missing ENRICHLAYER_API_KEY" },
+        { status: 500 }
+      )
+    }
 
-                                                        /* -------------------------------------------------------
-                                                               STEP 1 — Reverse email lookup → public_identifier
-                                                                   ------------------------------------------------------- */
+    /* -------------------------------------------------------
+       STEP 1 — Reverse email lookup to get public_identifier
+       Endpoint: /api/v2/profile/resolve/email
+       enrich_profile=no so we ONLY get the identifier, no cached junk
+       ------------------------------------------------------- */
 
-                                                                       const emailUrl = new URL("https://enrichlayer.com/api/v2/profile/resolve/email")
-                                                                           emailUrl.searchParams.set("email", user.email)
-                                                                               emailUrl.searchParams.set("lookup_depth", "deep")
+    const emailParams = new URLSearchParams({
+      email: user.email,
+      lookup_depth: "deep",
+      enrich_profile: "no",
+    })
 
-                                                                                   const emailRes = await fetch(emailUrl.toString(), {
-                                                                                         headers: { Authorization: `Bearer ${apiKey}` },
-                                                                                             })
+    console.log("[v0] Step 1: Email lookup for", user.email)
 
-                                                                                                 if (!emailRes.ok) {
-                                                                                                       return NextResponse.json(
-                                                                                                               { error: "Email lookup failed", raw: await emailRes.text() },
-                                                                                                                       { status: 502 },
-                                                                                                                             )
-                                                                                                                                 }
+    const emailRes = await fetch(
+      `https://enrichlayer.com/api/v2/profile/resolve/email?${emailParams.toString()}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }
+    )
 
-                                                                                                                                     const emailData = await emailRes.json()
-                                                                                                                                         const publicIdentifier =
-                                                                                                                                               emailData?.public_identifier ?? emailData?.profile?.public_identifier
+    if (!emailRes.ok) {
+      const raw = await emailRes.text()
+      console.log("[v0] Step 1 failed:", emailRes.status, raw)
+      return NextResponse.json(
+        { error: "Email lookup failed", status: emailRes.status, raw },
+        { status: 502 }
+      )
+    }
 
-                                                                                                                                                   if (!publicIdentifier) {
-                                                                                                                                                         return NextResponse.json(
-                                                                                                                                                                 { error: "No LinkedIn public_identifier resolved" },
-                                                                                                                                                                         { status: 404 },
-                                                                                                                                                                               )
-                                                                                                                                                                                   }
+    const emailData = await emailRes.json()
+    console.log("[v0] Step 1 response keys:", Object.keys(emailData))
 
-                                                                                                                                                                                       /* -------------------------------------------------------
-                                                                                                                                                                                              STEP 2 — Full profile fetch (NO METADATA MODE)
-                                                                                                                                                                                                  ------------------------------------------------------- */
+    // Extract public_identifier from response
+    const publicIdentifier =
+      emailData?.public_identifier ??
+      emailData?.profile?.public_identifier ??
+      emailData?.linkedin_profile_url?.split("/in/")[1]?.replace(/\/$/, "")
 
-                                                                                                                                                                                                      const profileUrl = new URL("https://enrichlayer.com/api/v2/profile")
-                                                                                                                                                                                                          profileUrl.searchParams.set("public_identifier", publicIdentifier)
-                                                                                                                                                                                                              profileUrl.searchParams.set("skills", "include")
-                                                                                                                                                                                                                  profileUrl.searchParams.set("experience", "include")
-                                                                                                                                                                                                                      profileUrl.searchParams.set("education", "include")
-                                                                                                                                                                                                                          profileUrl.searchParams.set("use_cache", "if-present")
-                                                                                                                                                                                                                              profileUrl.searchParams.set("fallback_to_cache", "on-error")
+    if (!publicIdentifier) {
+      console.log("[v0] No public_identifier found in:", JSON.stringify(emailData).slice(0, 500))
+      return NextResponse.json(
+        { error: "Could not resolve LinkedIn profile from email", emailData },
+        { status: 404 }
+      )
+    }
 
-                                                                                                                                                                                                                                  const profileRes = await fetch(profileUrl.toString(), {
-                                                                                                                                                                                                                                        headers: { Authorization: `Bearer ${apiKey}` },
-                                                                                                                                                                                                                                            })
+    console.log("[v0] Step 1 resolved public_identifier:", publicIdentifier)
 
-                                                                                                                                                                                                                                                if (!profileRes.ok) {
-                                                                                                                                                                                                                                                      return NextResponse.json(
-                                                                                                                                                                                                                                                              { error: "Profile fetch failed", raw: await profileRes.text() },
-                                                                                                                                                                                                                                                                      { status: 502 },
-                                                                                                                                                                                                                                                                            )
-                                                                                                                                                                                                                                                                                }
+    /* -------------------------------------------------------
+       STEP 2 — Full Person Profile fetch using linkedin_profile_url
+       Endpoint: /api/v2/profile
+       Chained with the public_identifier from Step 1
+       Uses use_cache=if-present, live_fetch=force for fresh data
+       ------------------------------------------------------- */
 
-                                                                                                                                                                                                                                                                                    const profileData = await profileRes.json()
+    // Small delay between chained calls to be safe
+    await new Promise((resolve) => setTimeout(resolve, 800))
 
-                                                                                                                                                                                                                                                                                        /* -------------------------------------------------------
-                                                                                                                                                                                                                                                                                               HARD GUARDS — reject metadata / compatibility payloads
-                                                                                                                                                                                                                                                                                                   ------------------------------------------------------- */
+    const profileParams = new URLSearchParams({
+      linkedin_profile_url: `https://linkedin.com/in/${publicIdentifier}/`,
+      extra: "include",
+      github_profile_id: "include",
+      facebook_profile_id: "include",
+      twitter_profile_id: "include",
+      personal_contact_number: "include",
+      personal_email: "include",
+      inferred_salary: "include",
+      skills: "include",
+      use_cache: "if-present",
+      fallback_to_cache: "on-error",
+      live_fetch: "force",
+    })
 
-                                                                                                                                                                                                                                                                                                       if (
-                                                                                                                                                                                                                                                                                                             !profileData ||
-                                                                                                                                                                                                                                                                                                                   typeof profileData !== "object" ||
-                                                                                                                                                                                                                                                                                                                         "backwards_compatibility_notes" in profileData ||
-                                                                                                                                                                                                                                                                                                                               (!profileData.full_name && !profileData.experiences)
-                                                                                                                                                                                                                                                                                                                                   ) {
-                                                                                                                                                                                                                                                                                                                                         return NextResponse.json(
-                                                                                                                                                                                                                                                                                                                                                 {
-                                                                                                                                                                                                                                                                                                                                                           error: "Invalid EnrichLayer profile payload",
-                                                                                                                                                                                                                                                                                                                                                                     raw: profileData,
-                                                                                                                                                                                                                                                                                                                                                                             },
-                                                                                                                                                                                                                                                                                                                                                                                     { status: 502 },
-                                                                                                                                                                                                                                                                                                                                                                                           )
-                                                                                                                                                                                                                                                                                                                                                                                               }
+    console.log("[v0] Step 2: Person Profile fetch for", publicIdentifier)
 
-                                                                                                                                                                                                                                                                                                                                                                                                   /* -------------------------------------------------------
-                                                                                                                                                                                                                                                                                                                                                                                                          STEP 3 — Sanitize (remove nulls only)
-                                                                                                                                                                                                                                                                                                                                                                                                              ------------------------------------------------------- */
+    const profileRes = await fetch(
+      `https://enrichlayer.com/api/v2/profile?${profileParams.toString()}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }
+    )
 
-                                                                                                                                                                                                                                                                                                                                                                                                                  const sanitizedProfile = sanitizeProfile(profileData)
+    if (!profileRes.ok) {
+      const raw = await profileRes.text()
+      console.log("[v0] Step 2 failed:", profileRes.status, raw)
+      return NextResponse.json(
+        { error: "Profile fetch failed", status: profileRes.status, raw },
+        { status: 502 }
+      )
+    }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                      /* -------------------------------------------------------
-                                                                                                                                                                                                                                                                                                                                                                                                                             STEP 4 — Persist
-                                                                                                                                                                                                                                                                                                                                                                                                                                 ------------------------------------------------------- */
+    const profileData = await profileRes.json()
+    console.log("[v0] Step 2 response keys:", Object.keys(profileData))
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                     const { error: upsertError } = await supabase
-                                                                                                                                                                                                                                                                                                                                                                                                                                           .from("people")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                 .upsert(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                         {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                   id: user.id,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                             email: user.email,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       resume_raw: profileData,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 resume_content: sanitizedProfile,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           resume_content_modified: sanitizedProfile,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     public_identifier: publicIdentifier,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               vanity_url: publicIdentifier,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         updated_at: new Date().toISOString(),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         { onConflict: "id" },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               )
+    /* -------------------------------------------------------
+       HARD GUARD — reject metadata-only / compatibility payloads
+       A valid profile MUST have full_name or experiences
+       ------------------------------------------------------- */
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   if (upsertError) {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         return NextResponse.json(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 { error: "Failed to save profile" },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         { status: 500 },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               )
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   }
+    if (
+      !profileData ||
+      typeof profileData !== "object" ||
+      "backwards_compatibility_notes" in profileData ||
+      (!profileData.full_name && !profileData.first_name && !profileData.experiences)
+    ) {
+      console.log("[v0] Invalid payload detected:", JSON.stringify(profileData).slice(0, 500))
+      return NextResponse.json(
+        { error: "EnrichLayer returned metadata instead of profile data", raw: profileData },
+        { status: 502 }
+      )
+    }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       return NextResponse.json({
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             success: true,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   profile: sanitizedProfile,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       })
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         } catch (err) {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             return NextResponse.json(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   { error: err instanceof Error ? err.message : "Unknown error" },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         { status: 500 },
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             )
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               }
+    /* -------------------------------------------------------
+       STEP 3 — Sanitize: strip nulls, inject public_identifier
+       ------------------------------------------------------- */
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               function sanitizeProfile(data: Record<string, unknown>): Record<string, unknown> {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 const result: Record<string, unknown> = {}
+    const sanitized = sanitizeProfile(profileData)
+    // Ensure public_identifier is always present
+    sanitized.public_identifier = publicIdentifier
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   for (const [key, value] of Object.entries(data)) {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       if (value === null) continue
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           if (Array.isArray(value)) {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 result[key] = value.map((v) =>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         typeof v === "object" && v !== null
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ? sanitizeProfile(v as Record<string, unknown>)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             : v,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   )
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       } else if (typeof value === "object") {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             result[key] = sanitizeProfile(value as Record<string, unknown>)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 } else {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       result[key] = value
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             }
+    console.log("[v0] Sanitized profile. full_name:", sanitized.full_name, "experiences:", Array.isArray(sanitized.experiences) ? sanitized.experiences.length : 0)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               return result
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               }
+    /* -------------------------------------------------------
+       STEP 4 — Save to Supabase people table
+       Only write to columns that exist in the schema:
+       id, email, resume_content, resume_content_modified, theme_data, plan
+       ------------------------------------------------------- */
+
+    const { error: upsertError } = await supabase
+      .from("people")
+      .upsert(
+        {
+          id: user.id,
+          email: user.email,
+          resume_content: sanitized,
+          resume_content_modified: sanitized,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      )
+
+    if (upsertError) {
+      console.log("[v0] Supabase upsert error:", upsertError)
+      return NextResponse.json(
+        { error: "Failed to save profile", details: upsertError.message },
+        { status: 500 }
+      )
+    }
+
+    console.log("[v0] Profile saved successfully for user:", user.id)
+
+    return NextResponse.json({
+      success: true,
+      profile: sanitized,
+    })
+  } catch (err) {
+    console.log("[v0] Unhandled error:", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Recursively remove null values from the profile object.
+ * Replace null with appropriate defaults (empty string, empty array, etc.)
+ */
+function sanitizeProfile(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === null || value === undefined) {
+      // Skip nulls entirely — don't include them
+      continue
+    }
+
+    if (Array.isArray(value)) {
+      result[key] = value
+        .filter((v) => v !== null && v !== undefined)
+        .map((v) =>
+          typeof v === "object" && v !== null
+            ? sanitizeProfile(v as Record<string, unknown>)
+            : v
+        )
+    } else if (typeof value === "object") {
+      result[key] = sanitizeProfile(value as Record<string, unknown>)
+    } else {
+      result[key] = value
+    }
+  }
+
+  return result
+}

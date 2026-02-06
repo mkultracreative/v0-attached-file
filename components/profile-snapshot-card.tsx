@@ -50,7 +50,24 @@ const itemVariants = {
 export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnapshotCardProps) {
   const [isLoading, setIsLoading] = useState(!hasResume)
   const [error, setError] = useState<string | null>(null)
-  const [profileData, setProfileData] = useState<ProfileLiveData | null>(personData?.resume_content || null)
+  // Handle both flat and wrapped { profiles: [...] } formats from resume_content
+  const normalizeProfile = (data: unknown): ProfileLiveData | null => {
+    if (!data || typeof data !== "object") return null
+    const obj = data as Record<string, unknown>
+    // Wrapped format: { profiles: [{ full_name, ... }] }
+    if (Array.isArray(obj.profiles) && obj.profiles.length > 0) {
+      return obj.profiles[0] as ProfileLiveData
+    }
+    // Flat format: { full_name, experiences, ... }
+    if (obj.full_name || obj.first_name || Array.isArray(obj.experiences)) {
+      return obj as unknown as ProfileLiveData
+    }
+    return null
+  }
+
+  const [profileData, setProfileData] = useState<ProfileLiveData | null>(
+    normalizeProfile(personData?.resume_content) || null
+  )
   const [progress, setProgress] = useState(0)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const router = useRouter()

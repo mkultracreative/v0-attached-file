@@ -1,8 +1,17 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { FileText, Sparkles, Users, Linkedin } from "lucide-react"
 
-export default function HomePage() {
+export default async function HomePage() {
+  // If the user is already authenticated, send them straight to /profile
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    redirect("/profile")
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}

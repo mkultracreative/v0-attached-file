@@ -1,96 +1,62 @@
-import Link from "next/link"
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { Button } from "@/components/ui/button"
-import { FileText, Sparkles, Users, Linkedin } from "lucide-react"
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { ProfileSnapshotCard } from "@/components/profile-snapshot-card";
 
-export default async function HomePage() {
-  // If the user is already authenticated, send them straight to /profile
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (user) {
-    redirect("/profile")
+export default async function ProfilePage() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    console.error("Auth error:", userError);
+    redirect("/auth/login?error=session_invalid");
+  }
+
+  // Check if user exists in people table
+  const { data: personData, error: personError } = await supabase
+    .from("people")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  if (personError) {
+    console.error("Database error:", personError);
+    // Don't throw — render without person data
+  }
+
+  // Resume validation logic...
+  const raw = personData?.resume_content as Record<string, unknown> | null;
+  let hasResume = false;
+  if (
+    raw &&
+    typeof raw === "object" &&
+    !("backwards_compatibility_notes" in raw)
+  ) {
+    if (raw.full_name || raw.first_name || Array.isArray(raw.experiences)) {
+      hasResume = true;
+    }
+    if (!hasResume && Array.isArray(raw.profiles) && raw.profiles.length > 0) {
+      const firstProfile = raw.profiles[0] as Record<string, unknown>;
+      if (
+        firstProfile?.full_name ||
+        firstProfile?.first_name ||
+        Array.isArray(firstProfile?.experiences)
+      ) {
+        hasResume = true;
+      }
+    }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <FileText className="h-6 w-6 text-primary" />
-            <span className="text-xl font-semibold">ResumeAI</span>
-          </div>
-          <nav className="flex items-center gap-4">
-            <Link href="/auth/login">
-              <Button className="gap-2 bg-[#0A66C2] hover:bg-[#004182] text-white">
-                <Linkedin className="h-4 w-4" />
-                Sign in with LinkedIn
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      {/* Hero Section */}
-      <main className="container mx-auto px-4 py-20">
-        <div className="mx-auto max-w-3xl text-center">
-          <h1 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-            Import Your LinkedIn Profile, Build Your Resume
-          </h1>
-          <p className="mt-6 text-pretty text-lg text-muted-foreground">
-            Connect your LinkedIn account and instantly create a professional, ATS-friendly resume. Your work history,
-            skills, and education imported automatically.
-          </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-4">
-            <Link href="/auth/login">
-              <Button size="lg" className="gap-2 bg-[#0A66C2] hover:bg-[#004182] text-white">
-                <Linkedin className="h-5 w-5" />
-                Continue with LinkedIn
-              </Button>
-            </Link>
-            <p className="text-sm text-muted-foreground">One click to import your entire professional profile</p>
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="mx-auto mt-24 grid max-w-4xl gap-8 sm:grid-cols-3">
-          <div className="flex flex-col items-center text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#0A66C2]/10">
-              <Linkedin className="h-6 w-6 text-[#0A66C2]" />
-            </div>
-            <h3 className="mt-4 font-semibold">LinkedIn Import</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Import your work history, education, and skills directly from LinkedIn.
-            </p>
-          </div>
-          <div className="flex flex-col items-center text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-              <Sparkles className="h-6 w-6 text-primary" />
-            </div>
-            <h3 className="mt-4 font-semibold">AI-Enhanced</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Let AI help you polish descriptions and optimize your content.
-            </p>
-          </div>
-          <div className="flex flex-col items-center text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-              <Users className="h-6 w-6 text-primary" />
-            </div>
-            <h3 className="mt-4 font-semibold">Real-Time Collaboration</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Edit your resume with live updates and seamless sync across devices.
-            </p>
-          </div>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} ResumeAI. All rights reserved.</p>
-        </div>
-      </footer>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-secondary/20 p-4">
+      <ProfileSnapshotCard
+        user={user}
+        hasResume={hasResume}
+        personData={personData}
+      />
     </div>
-  )
+  );
 }

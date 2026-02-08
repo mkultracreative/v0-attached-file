@@ -3,15 +3,14 @@
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
 import { useState } from "react"
 import { FileText, Linkedin } from "lucide-react"
 
-export default function SignUpPage() {
+export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleLinkedInSignUp = async () => {
+  const handleLinkedInLogin = async () => {
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
@@ -40,32 +39,26 @@ export default function SignUpPage() {
           </div>
           <Card>
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Get Started</CardTitle>
+              <CardTitle className="text-2xl">Welcome</CardTitle>
               <CardDescription>
-                Connect your LinkedIn account to automatically import your profile and create a professional resume
+                Sign in with your LinkedIn account to import your profile and create your resume
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">
                 {error && <p className="text-sm text-destructive text-center">{error}</p>}
                 <Button
-                  onClick={handleLinkedInSignUp}
+                  onClick={handleLinkedInLogin}
                   className="w-full bg-[#0A66C2] hover:bg-[#004182] text-white"
                   disabled={isLoading}
                   size="lg"
                 >
                   <Linkedin className="mr-2 h-5 w-5" />
-                  {isLoading ? "Connecting..." : "Sign up with LinkedIn"}
+                  {isLoading ? "Connecting..." : "Continue with LinkedIn"}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  We&apos;ll import your work history, education, and skills automatically
+                  By signing in, you agree to our Terms of Service and Privacy Policy
                 </p>
-                <div className="text-center text-sm">
-                  Already have an account?{" "}
-                  <Link href="/auth/login" className="underline underline-offset-4">
-                    Login
-                  </Link>
-                </div>
               </div>
             </CardContent>
           </Card>

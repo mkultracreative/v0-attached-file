@@ -1,4 +1,4 @@
-"use client"
+/* "use client"
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -67,3 +67,4 @@ export default function LoginPage() {
     </div>
   )
 }
+*/

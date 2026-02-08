@@ -27,7 +27,9 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error } = await (
+        await supabase
+      ).auth.signInWithOAuth({
         provider: "linkedin_oidc",
         options: {
           redirectTo: `${window.location.origin}/auth/oauth?next=/profile`,

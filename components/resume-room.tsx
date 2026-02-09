@@ -1,102 +1,109 @@
-"use client"
+"use client";
 
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 import {
   LiveblocksProvider,
-    RoomProvider,
-      ClientSideSuspense,
-      } from "@liveblocks/react/suspense"
-      import { Loader2 } from "lucide-react"
+  RoomProvider,
+  ClientSideSuspense,
+} from "@liveblocks/react/suspense";
+import { LiveObject, LiveList } from "@liveblocks/client";
+import { Loader2 } from "lucide-react";
 
-      import type {
-        ProfileLiveData,
-          ResumeThemeLiveData,
-            SettingsLiveData,
-            } from "@/lib/schemas"
-            import { normalizeProfile } from "@/lib/normalize-profile"
+interface ResumeRoomProps {
+  children: ReactNode;
+  userId: string;
+  initialData: any;
+  userInfo: any;
+}
 
-            interface PersonData {
-              id: string
-                resume_content: ProfileLiveData
-                  resume_content_modified?: ProfileLiveData
-                    theme_data?: ResumeThemeLiveData
-                      public_identifier?: string
-                        vanity_url?: string
-                        }
+export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
+  // Get raw profile data
+  const rawProfile =
+    initialData?.resume_content_modified ?? initialData?.resume_content;
 
-                        interface UserInfo {
-                          id: string
-                            name: string
-                              email: string
-                                avatar?: string
-                                }
+  // Normalize to handle both flat and wrapped formats
+  const profileData = rawProfile?.profiles?.[0] ?? rawProfile ?? {};
 
-                                interface ResumeRoomProps {
-                                  children: ReactNode
-                                    userId: string
-                                      initialData: PersonData
-                                        userInfo: UserInfo
-                                        }
+  // Create LiveObject with LiveList children
+  const profile = new LiveObject({
+    full_name: profileData.full_name || "",
+    headline: profileData.headline || profileData.occupation || "",
+    summary: profileData.summary || "",
+    city: profileData.city || "",
+    state: profileData.state || "",
+    country: profileData.country || "",
+    profile_pic_url: profileData.profile_pic_url || "",
+    skills: new LiveList(profileData.skills || []),
+    experiences: new LiveList(
+      (profileData.experiences || []).map(
+        (e: any) =>
+          new LiveObject({
+            title: e.title || "",
+            company: e.company || "",
+            description: e.description || "",
+            location: e.location || "",
+            starts_at: e.starts_at || null,
+            ends_at: e.ends_at || null,
+          })
+      )
+    ),
+    education: new LiveList(
+      (profileData.education || []).map(
+        (e: any) =>
+          new LiveObject({
+            school: e.school || "",
+            degree_name: e.degree_name || "",
+            field_of_study: e.field_of_study || "",
+            starts_at: e.starts_at || null,
+            ends_at: e.ends_at || null,
+          })
+      )
+    ),
+  });
 
-                                        const defaultTheme: ResumeThemeLiveData = {
-                                          name: "Classic",
-                                            colors: {
-                                                primary: "#1a1a1a",
-                                                    secondary: "#666666",
-                                                        accent: "#0066cc",
-                                                            background: "#ffffff",
-                                                                text: "#1a1a1a",
-                                                                  },
-                                                                    fonts: { heading: "Inter", body: "Inter" },
-                                                                      layout: { spacing: "comfortable", borderRadius: "sm" },
-                                                                      }
+  const theme = new LiveObject({
+    name: "Classic",
+    colors: {
+      primary: "#1a1a1a",
+      secondary: "#666666",
+      accent: "#0066cc",
+      background: "#ffffff",
+      text: "#1a1a1a",
+    },
+  });
 
-                                                                      const defaultSettings: SettingsLiveData = {
-                                                                        isEditMode: false,
-                                                                          lastModified: new Date().toISOString(),
-                                                                          }
+  const settings = new LiveObject({
+    isEditMode: false,
+    lastModified: new Date().toISOString(),
+  });
 
-                                                                          export function ResumeRoom({
-                                                                            children,
-                                                                              userId,
-                                                                                initialData,
-                                                                                }: ResumeRoomProps) {
-                                                                                  const rawProfile =
-                                                                                      initialData.resume_content_modified ?? initialData.resume_content
-
-                                                                                        const profile = normalizeProfile(rawProfile)
-                                                                                          const theme = initialData.theme_data ?? defaultTheme
-
-                                                                                            return (
-                                                                                                <LiveblocksProvider
-                                                                                                      authEndpoint={async () => {
-                                                                                                              const res = await fetch("/api/liveblocks-auth", {
-                                                                                                                        method: "POST",
-                                                                                                                                  headers: { "Content-Type": "application/json" },
-                                                                                                                                            body: JSON.stringify({ room: `resume-${userId}` }),
-                                                                                                                                                    })
-                                                                                                                                                            return res.json()
-                                                                                                                                                                  }}
-                                                                                                                                                                      >
-                                                                                                                                                                            <RoomProvider
-                                                                                                                                                                                    id={`resume-${userId}`}
-                                                                                                                                                                                            initialPresence={{ cursor: null, selectedField: null }}
-                                                                                                                                                                                                    initialStorage={{
-                                                                                                                                                                                                              profile,
-                                                                                                                                                                                                                        theme,
-                                                                                                                                                                                                                                  settings: defaultSettings,
-                                                                                                                                                                                                                                          }}
-                                                                                                                                                                                                                                                >
-                                                                                                                                                                                                                                                        <ClientSideSuspense
-                                                                                                                                                                                                                                                                  fallback={
-                                                                                                                                                                                                                                                                              <div className="flex min-h-screen items-center justify-center">
-                                                                                                                                                                                                                                                                                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                                                                                                                                                                                                                                                                                                        </div>
-                                                                                                                                                                                                                                                                                                                  }
-                                                                                                                                                                                                                                                                                                                          >
-                                                                                                                                                                                                                                                                                                                                    {children}
-                                                                                                                                                                                                                                                                                                                                            </ClientSideSuspense>
-                                                                                                                                                                                                                                                                                                                                                  </RoomProvider>
-                                                                                                                                                                                                                                                                                                                                                      </LiveblocksProvider>
-                                                                                                                                                                                                                                                                                                                                                        )
-                                                                                                                                                                                                                                                                                                                                                        }
+  return (
+    <LiveblocksProvider
+      authEndpoint={async () => {
+        const res = await fetch("/api/liveblocks-auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ room: `resume-${userId}` }),
+        });
+        if (!res.ok) throw new Error("Failed to authenticate");
+        return res.json();
+      }}
+    >
+      <RoomProvider
+        id={`resume-${userId}`}
+        initialPresence={{ cursor: null, selectedField: null }}
+        initialStorage={{ profile, theme, settings }}
+      >
+        <ClientSideSuspense
+          fallback={
+            <div className="flex min-h-screen items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          }
+        >
+          {children}
+        </ClientSideSuspense>
+      </RoomProvider>
+    </LiveblocksProvider>
+  );
+}

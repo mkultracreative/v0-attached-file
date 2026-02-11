@@ -1,24 +1,34 @@
-import { stackServer } from "@/lib/stack/server";
-import { redirect } from "next/navigation";
+import { stackServerApp } from "@/lib/stackServer";
+import Link from "next/link";
 
-export default async function Page({ request }: any) {
-  const user = await stackServer.getUser({ request });
-
-  if (!user) redirect("/login");
-
-  const account = await user.getConnectedAccount("linkedin");
-  if (!account) redirect("/login");
-
-  const token = await account.useAccessToken();
-
-  const profile = await fetch("https://api.linkedin.com/v2/me", {
-    headers: { Authorization: `Bearer ${token.accessToken}` },
-  }).then((r) => r.json());
+export default async function HomePage() {
+  const user = await stackServerApp.getUser();
 
   return (
-    <main>
-      <h1>Dashboard</h1>
-      <pre>{JSON.stringify(profile, null, 2)}</pre>
+    <main className="flex min-h-screen items-center justify-center">
+      {!user ? (
+        <div className="text-center space-y-4">
+          <h1 className="text-3xl font-bold">Dazzle Resume</h1>
+          <Link
+            href="/handler/sign-in"
+            className="px-6 py-3 bg-black text-white rounded-lg"
+          >
+            Login with LinkedIn
+          </Link>
+        </div>
+      ) : (
+        <div className="text-center space-y-4">
+          <h1 className="text-3xl font-bold">
+            Welcome {user.displayName ?? user.email}
+          </h1>
+          <Link
+            href="/app"
+            className="px-6 py-3 bg-black text-white rounded-lg"
+          >
+            Open Dashboard
+          </Link>
+        </div>
+      )}
     </main>
   );
 }

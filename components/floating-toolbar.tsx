@@ -78,17 +78,34 @@ export function FloatingToolbar({ userId }: FloatingToolbarProps) {
 
   const updateThemeColors = useMutation(({ storage }, colors: Record<string, string>) => {
     const t = storage.get("theme")
-    if (t) t.colors = { ...t.colors, ...colors }
+    if (!t || typeof t.get !== "function") return
+    const existing = t.get("colors" as any)
+    if (existing && typeof existing.set === "function") {
+      for (const [k, v] of Object.entries(colors)) {
+        existing.set(k as any, v)
+      }
+    } else {
+      // If colors is not a LiveObject, set it directly
+      t.set("colors" as any, colors as any)
+    }
   }, [])
 
   const updateThemeFonts = useMutation(({ storage }, fonts: Record<string, string>) => {
     const t = storage.get("theme")
-    if (t) t.fonts = { ...t.fonts, ...fonts }
+    if (!t || typeof t.get !== "function") return
+    const existing = t.get("fonts" as any)
+    if (existing && typeof existing.set === "function") {
+      for (const [k, v] of Object.entries(fonts)) {
+        existing.set(k as any, v)
+      }
+    } else {
+      t.set("fonts" as any, fonts as any)
+    }
   }, [])
 
   const updateThemeName = useMutation(({ storage }, name: string) => {
     const t = storage.get("theme")
-    if (t) t.name = name
+    if (t && typeof t.set === "function") t.set("name" as any, name)
   }, [])
 
   const applyTheme = async (themeDef: (typeof occupationThemes)[0]) => {
@@ -125,7 +142,7 @@ export function FloatingToolbar({ userId }: FloatingToolbarProps) {
       <motion.div
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="fixed bottom-8 left-1/2 right-1/2 -translate-x-1/2 z-50 print:hidden"
+        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 print:hidden"
       >
         <TooltipProvider delayDuration={200}>
           <div className="flex items-center gap-1 rounded-full border bg-background/90 backdrop-blur px-3 py-2 shadow-lg">

@@ -11,6 +11,8 @@ import { Progress } from "@/components/ui/progress"
 import { FileText, Linkedin, CheckCircle2, Briefcase, GraduationCap, Award, Share2, MapPin, Mail } from "lucide-react"
 import { ShareDialog } from "@/components/share-dialog"
 import type { ProfileLiveData } from "@/lib/schemas"
+// TEMPORARY: Import mock data for testing - delete after testing
+import { MOCK_PROFILE_DATA, USE_MOCK_DATA } from "@/lib/mock-profile-data"
 
 interface ProfileSnapshotCardProps {
   user: User
@@ -48,7 +50,9 @@ const itemVariants = {
 }
 
 export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnapshotCardProps) {
-  const [isLoading, setIsLoading] = useState(!hasResume)
+  // TEMPORARY: Use mock data if enabled - delete after testing
+  const effectiveHasResume = USE_MOCK_DATA ? true : hasResume
+  const [isLoading, setIsLoading] = useState(!effectiveHasResume)
   const [error, setError] = useState<string | null>(null)
   // Handle both flat and wrapped { profiles: [...] } formats from resume_content
   const normalizeProfile = (data: unknown): ProfileLiveData | null => {
@@ -65,18 +69,21 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
     return null
   }
 
+  // TEMPORARY: Use mock data if enabled - delete after testing
   const [profileData, setProfileData] = useState<ProfileLiveData | null>(
-    normalizeProfile(personData?.resume_content) || null
+    USE_MOCK_DATA ? (MOCK_PROFILE_DATA as unknown as ProfileLiveData) : (normalizeProfile(personData?.resume_content) || null)
   )
   const [progress, setProgress] = useState(0)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
+    // TEMPORARY: Skip API call if using mock data - delete after testing
+    if (USE_MOCK_DATA) return
     if (!hasResume && !error) {
       fetchProfileData()
     }
-  }, [hasResume])
+  }, [hasResume, error])
 
   useEffect(() => {
     if (isLoading) {

@@ -14,6 +14,8 @@ import type {
   SettingsLiveData,
 } from "@/lib/schemas"
 import { normalizeProfile } from "@/lib/normalize-profile"
+// TEMPORARY: Import mock data for testing - delete after testing
+import { MOCK_PROFILE_DATA, MOCK_THEME_DATA, USE_MOCK_DATA } from "@/lib/mock-profile-data"
 
 interface PersonData {
   id: string
@@ -95,9 +97,14 @@ function toLiveTheme(data: ResumeThemeLiveData) {
 }
 
 export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
-  const rawProfile = initialData.resume_content_modified ?? initialData.resume_content
-  const profile = normalizeProfile(rawProfile)
-  const theme = initialData.theme_data ?? defaultTheme
+  // TEMPORARY: Use mock data if enabled - delete after testing
+  const rawProfile = USE_MOCK_DATA
+    ? MOCK_PROFILE_DATA
+    : (initialData.resume_content_modified ?? initialData.resume_content)
+  const profile = normalizeProfile(rawProfile as ProfileLiveData)
+  const theme = USE_MOCK_DATA
+    ? (MOCK_THEME_DATA as ResumeThemeLiveData)
+    : (initialData.theme_data ?? defaultTheme)
 
   return (
     <LiveblocksProvider

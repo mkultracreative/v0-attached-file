@@ -2,11 +2,14 @@ import { Liveblocks } from "@liveblocks/node"
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
-const liveblocks = new Liveblocks({
-  secret: process.env.LIVEBLOCKS_SECRET_KEY!,
-})
-
 export async function POST(request: Request) {
+  const secret = process.env.LIVEBLOCKS_SECRET_KEY
+  if (!secret) {
+    return NextResponse.json({ error: "Liveblocks secret key not configured" }, { status: 500 })
+  }
+
+  const liveblocks = new Liveblocks({ secret })
+
   const supabase = await createClient()
   const {
     data: { user },

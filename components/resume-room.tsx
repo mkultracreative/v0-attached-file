@@ -5,77 +5,106 @@ import {
   LiveblocksProvider,
   RoomProvider,
   ClientSideSuspense,
-} from "@liveblocks/react/suspense";
-import { LiveObject, LiveList } from "@liveblocks/client";
-import { Loader2 } from "lucide-react";
+} from "@liveblocks/react/suspense"
+import { LiveObject, LiveList } from "@liveblocks/client"
+import { Loader2 } from "lucide-react"
+import type {
+  ProfileLiveData,
+  ResumeThemeLiveData,
+  SettingsLiveData,
+} from "@/lib/schemas"
+import { normalizeProfile } from "@/lib/normalize-profile"
+// TEMPORARY: Import mock data for testing - delete after testing
+import { MOCK_PROFILE_DATA, MOCK_THEME_DATA, USE_MOCK_DATA } from "@/lib/mock-profile-data"
+
+interface PersonData {
+  id: string
+  resume_content: ProfileLiveData
+  resume_content_modified?: ProfileLiveData
+  theme_data?: ResumeThemeLiveData
+  public_identifier?: string
+  vanity_url?: string
+}
+
+interface UserInfo {
+  id: string
+  name: string
+  email: string
+  avatar?: string
+}
 
 interface ResumeRoomProps {
-  children: ReactNode;
-  userId: string;
-  initialData: any;
-  userInfo: any;
+  children: ReactNode
+  userId: string
+  initialData: PersonData
+  userInfo: UserInfo
+}
+
+const defaultTheme: ResumeThemeLiveData = {
+  name: "Classic",
+  colors: {
+    primary: "#1a1a1a",
+    secondary: "#666666",
+    accent: "#0066cc",
+    background: "#ffffff",
+    text: "#1a1a1a",
+  },
+  fonts: { heading: "Inter", body: "Inter" },
+  layout: { spacing: "comfortable", borderRadius: "sm" },
+}
+
+const defaultSettings: SettingsLiveData = {
+  isEditMode: false,
+  lastModified: new Date().toISOString(),
+}
+
+function toLiveProfile(data: ProfileLiveData) {
+  const obj: Record<string, any> = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (Array.isArray(v)) {
+      obj[k] = new LiveList(
+        v.map((item) => {
+          if (typeof item === "object" && item !== null) {
+            const inner: Record<string, any> = {}
+            for (const [ik, iv] of Object.entries(item)) {
+              if (typeof iv === "object" && iv !== null && !Array.isArray(iv)) {
+                inner[ik] = new LiveObject(iv as any)
+              } else {
+                inner[ik] = iv
+              }
+            }
+            return new LiveObject(inner)
+          }
+          return item
+        }),
+      )
+    } else if (typeof v === "object" && v !== null) {
+      obj[k] = new LiveObject(v as any)
+    } else {
+      obj[k] = v
+    }
+  }
+  return new LiveObject(obj)
+}
+
+function toLiveTheme(data: ResumeThemeLiveData) {
+  return new LiveObject({
+    name: data.name,
+    colors: new LiveObject(data.colors),
+    fonts: new LiveObject(data.fonts),
+    layout: new LiveObject(data.layout),
+  })
 }
 
 export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
-  // Get raw profile data
-  const rawProfile =
-    initialData?.resume_content_modified ?? initialData?.resume_content;
-
-  // Normalize to handle both flat and wrapped formats
-  const profileData = rawProfile?.profiles?.[0] ?? rawProfile ?? {};
-
-  // Create LiveObject with LiveList children
-  const profile = new LiveObject({
-    full_name: profileData.full_name || "",
-    headline: profileData.headline || profileData.occupation || "",
-    summary: profileData.summary || "",
-    city: profileData.city || "",
-    state: profileData.state || "",
-    country: profileData.country || "",
-    profile_pic_url: profileData.profile_pic_url || "",
-    skills: new LiveList(profileData.skills || []),
-    experiences: new LiveList(
-      (profileData.experiences || []).map(
-        (e: any) =>
-          new LiveObject({
-            title: e.title || "",
-            company: e.company || "",
-            description: e.description || "",
-            location: e.location || "",
-            starts_at: e.starts_at || null,
-            ends_at: e.ends_at || null,
-          })
-      )
-    ),
-    education: new LiveList(
-      (profileData.education || []).map(
-        (e: any) =>
-          new LiveObject({
-            school: e.school || "",
-            degree_name: e.degree_name || "",
-            field_of_study: e.field_of_study || "",
-            starts_at: e.starts_at || null,
-            ends_at: e.ends_at || null,
-          })
-      )
-    ),
-  });
-
-  const theme = new LiveObject({
-    name: "Classic",
-    colors: {
-      primary: "#1a1a1a",
-      secondary: "#666666",
-      accent: "#0066cc",
-      background: "#ffffff",
-      text: "#1a1a1a",
-    },
-  });
-
-  const settings = new LiveObject({
-    isEditMode: false,
-    lastModified: new Date().toISOString(),
-  });
+  // TEMPORARY: Use mock data if enabled - delete after testing
+  const rawProfile = USE_MOCK_DATA
+    ? MOCK_PROFILE_DATA
+    : (initialData.resume_content_modified ?? initialData.resume_content)
+  const profile = normalizeProfile(rawProfile as ProfileLiveData)
+  const theme = USE_MOCK_DATA
+    ? (MOCK_THEME_DATA as ResumeThemeLiveData)
+    : (initialData.theme_data ?? defaultTheme)
 
   return (
     <LiveblocksProvider
@@ -84,15 +113,18 @@ export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ room: `resume-${userId}` }),
-        });
-        if (!res.ok) throw new Error("Failed to authenticate");
-        return res.json();
+        })
+        return res.json()
       }}
     >
       <RoomProvider
         id={`resume-${userId}`}
         initialPresence={{ cursor: null, selectedField: null }}
-        initialStorage={{ profile, theme, settings }}
+        initialStorage={{
+          profile: toLiveProfile(profile),
+          theme: toLiveTheme(theme),
+          settings: new LiveObject(defaultSettings),
+        }}
       >
         <ClientSideSuspense
           fallback={
@@ -105,5 +137,5 @@ export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
         </ClientSideSuspense>
       </RoomProvider>
     </LiveblocksProvider>
-  );
+  )
 }

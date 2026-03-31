@@ -1,3 +1,5 @@
+'use client'
+
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileSnapshotCard } from "@/components/profile-snapshot-card";

@@ -28,78 +28,78 @@ import { z } from "zod"
                                          field_of_study: z.string().default(""),
                                            description: z.string().default(""),
                                              logo_url: z.string().default(""),
-                                               starts_at: DateModel,
-                                                 ends_at: DateModel,
-                                                 })
+ starts_at: DateModel,
+   ends_at: DateModel,
+   })
 
-                                                 export const ResumeCanonicalSchema = z.object({
-                                                   full_name: z.string().default(""),
-                                                     headline: z.string().default(""),
-                                                       summary: z.string().default(""),
+   export const ResumeCanonicalSchema = z.object({
+     full_name: z.string().default(""),
+       headline: z.string().default(""),
+         summary: z.string().default(""),
 
-                                                         city: z.string().default(""),
-                                                           state: z.string().default(""),
-                                                             country: z.string().default(""),
+           city: z.string().default(""),
+             state: z.string().default(""),
+               country: z.string().default(""),
 
-                                                               occupation: z.string().default(""),
+                 occupation: z.string().default(""),
 
-                                                                 skills: z.array(z.string()).default([]),
-                                                                   languages: z.array(z.string()).default([]),
-                                                                     interests: z.array(z.string()).default([]),
+                   skills: z.array(z.string()).default([]),
+                     languages: z.array(z.string()).default([]),
+                       interests: z.array(z.string()).default([]),
 
-                                                                       experiences: z.array(Experience).default([]),
-                                                                         education: z.array(Education).default([]),
+                         experiences: z.array(Experience).default([]),
+                           education: z.array(Education).default([]),
 
-                                                                           certifications: z.array(
-                                                                               z.object({
-                                                                                     name: z.string().default(""),
-                                                                                           authority: z.string().default(""),
-                                                                                               }),
-                                                                                                 ).default([]),
+                             certifications: z.array(
+                                 z.object({
+                                       name: z.string().default(""),
+                                             authority: z.string().default(""),
+   }),
+     ).default([]),
 
-                                                                                                   projects: z.array(
-                                                                                                       z.object({
-                                                                                                             title: z.string().default(""),
-                                                                                                                   description: z.string().default(""),
-                                                                                                                         url: z.string().default(""),
-                                                                                                                             }),
-                                                                                                                               ).default([]),
+       projects: z.array(
+           z.object({
+                 title: z.string().default(""),
+                       description: z.string().default(""),
+                             url: z.string().default(""),
+                                 }),
+                                   ).default([]),
 
-                                                                                                                                 meta: z.object({
-                                                                                                                                     last_updated: z.string().default(""),
-                                                                                                                                       }).default({ last_updated: "" }),
-                                                                                                                                       })
+                                     meta: z.object({
+                                         last_updated: z.string().default(""),
+                                           }).default({ last_updated: "" }),
+                                           })
 
-                                                                                                                                       export type ResumeCanonical = z.infer<typeof ResumeCanonicalSchema>
+                                           export type ResumeCanonical = z.infer<typeof ResumeCanonicalSchema>
 
-                                                                                                                                       /* ------------------------------------------------------------------
-                                                                                                                                          Normalizer (THIS replaces sanitizeProfile)
-                                                                                                                                          ------------------------------------------------------------------ */
+                                           /* ------------------------------------------------------------------
+Normalizer (THIS replaces sanitizeProfile)
+------------------------------------------------------------------ */
 
-                                                                                                                                          export function normalizeEnrichLayer(raw: unknown): ResumeCanonical {
-                                                                                                                                            const data = (raw ?? {}) as Record<string, any>
+export function normalizeEnrichLayer(raw: unknown): ResumeCanonical {
+  const data = (raw ?? {}) as Record<string, any>
 
-                                                                                                                                              return ResumeCanonicalSchema.parse({
-                                                                                                                                                  full_name: data.full_name,
-                                                                                                                                                      headline: data.headline,
-                                                                                                                                                          summary: data.summary,
+    return ResumeCanonicalSchema.parse({
+        full_name: data.full_name,
+            headline: data.headline,
+                summary: data.summary,
 
-                                                                                                                                                              city: data.city,
-                                                                                                                                                                  state: data.state,
-                                                                                                                                                                      country: data.country,
+                    city: data.city,
+                        state: data.state,
+                            country: data.country,
 
-                                                                                                                                                                          occupation: data.occupation,
+                                occupation: data.occupation,
 
-                                                                                                                                                                              skills: data.skills,
-                                                                                                                                                                                  languages: data.languages,
-                                                                                                                                                                                      interests: data.interests,
+                                    skills: data.skills,
+                                        languages: data.languages,
+                                            interests: data.interests,
 
-                                                                                                                                                                                          experiences: data.experiences,
-                                                                                                                                                                                              education: data.education,
+  experiences: data.experiences,
+      education: data.education,
 
-                                                                                                                                                                                                  certifications: data.certifications,
-                                                                                                                                                                                                      projects: data.accomplishment_projects,
+          certifications: data.certifications,
+              projects: data.accomplishment_projects,
 
-                                                                                                                                                                                                          meta: data.meta,
-                                                                                                                                                                                                            })
-                                                                                                                                                                                                            }
+                  meta: data.meta,
+                    })
+                    }

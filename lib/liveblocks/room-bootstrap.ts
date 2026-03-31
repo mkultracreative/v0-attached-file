@@ -13,29 +13,29 @@ interface RoomBootstrapParams {
                     : new LiveObject({
                               full_name: "",
                                         headline: "",
-                                                  summary: "",
-                                                            city: "",
-                                                                      state: "",
-                                                                                country: "",
-                                                                                          occupation: "",
-                                                                                                    skills: [],
-                                                                                                              languages: [],
-                                                                                                                        interests: [],
-                                                                                                                                  experiences: [],
-                                                                                                                                            education: [],
-                                                                                                                                                      certifications: [],
-                                                                                                                                                                projects: [],
-                                                                                                                                                                          meta: { last_updated: "" },
-                                                                                                                                                                                  }),
+    summary: "",
+              city: "",
+                        state: "",
+                                  country: "",
+                                            occupation: "",
+        skills: [],
+                  languages: [],
+                            interests: [],
+                                      experiences: [],
+  education: [],
+            certifications: [],
+                      projects: [],
+                                meta: { last_updated: "" },
+                                        }),
 
-                                                                                                                                                                                      theme: new LiveObject({
-                                                                                                                                                                                            colors: {
-                                                                                                                                                                                                    primary: "#1a1a1a",
-                                                                                                                                                                                                            secondary: "#666666",
-                                                                                                                                                                                                                    accent: "#0066cc",
-                                                                                                                                                                                                                            background: "#ffffff",
-                                                                                                                                                                                                                                    text: "#1a1a1a",
-                                                                                                                                                                                                                                          },
-                                                                                                                                                                                                                                              }),
-                                                                                                                                                                                                                                                }
-                                                                                                                                                                                                                                                }
+                                            theme: new LiveObject({
+    colors: {
+            primary: "#1a1a1a",
+                    secondary: "#666666",
+                            accent: "#0066cc",
+                                    background: "#ffffff",
+                                            text: "#1a1a1a",
+    },
+        }),
+          }
+          }

@@ -1,30 +1,16 @@
-"use client";
+"use client"
 
-import type { ReactNode } from "react";
+import type { ReactNode } from "react"
 import {
   LiveblocksProvider,
   RoomProvider,
   ClientSideSuspense,
 } from "@liveblocks/react/suspense"
-import { LiveObject, LiveList } from "@liveblocks/client"
 import { Loader2 } from "lucide-react"
-import type {
-  ProfileLiveData,
-  ResumeThemeLiveData,
-  SettingsLiveData,
-} from "@/lib/schemas"
-import { normalizeProfile } from "@/lib/normalize-profile"
-// TEMPORARY: Import mock data for testing - delete after testing
-import { MOCK_PROFILE_DATA, MOCK_THEME_DATA, USE_MOCK_DATA } from "@/lib/mock-profile-data"
-
-interface PersonData {
-  id: string
-  resume_content: ProfileLiveData
-  resume_content_modified?: ProfileLiveData
-  theme_data?: ResumeThemeLiveData
-  public_identifier?: string
-  vanity_url?: string
-}
+import type { ResumeThemeLiveData, SettingsLiveData } from "@/lib/schemas"
+import { normalizeEnrichLayer } from "@/lib/normalize-enrichlayer"
+import { hydrateResumeLive } from "@/lib/hydrate-resume-live"
+import type { PersonRow } from "@/app/profile/page"
 
 interface UserInfo {
   id: string
@@ -36,7 +22,7 @@ interface UserInfo {
 interface ResumeRoomProps {
   children: ReactNode
   userId: string
-  initialData: PersonData
+  initialData: PersonRow
   userInfo: UserInfo
 }
 
@@ -58,53 +44,14 @@ const defaultSettings: SettingsLiveData = {
   lastModified: new Date().toISOString(),
 }
 
-function toLiveProfile(data: ProfileLiveData) {
-  const obj: Record<string, any> = {}
-  for (const [k, v] of Object.entries(data)) {
-    if (Array.isArray(v)) {
-      obj[k] = new LiveList(
-        v.map((item) => {
-          if (typeof item === "object" && item !== null) {
-            const inner: Record<string, any> = {}
-            for (const [ik, iv] of Object.entries(item)) {
-              if (typeof iv === "object" && iv !== null && !Array.isArray(iv)) {
-                inner[ik] = new LiveObject(iv as any)
-              } else {
-                inner[ik] = iv
-              }
-            }
-            return new LiveObject(inner)
-          }
-          return item
-        }),
-      )
-    } else if (typeof v === "object" && v !== null) {
-      obj[k] = new LiveObject(v as any)
-    } else {
-      obj[k] = v
-    }
-  }
-  return new LiveObject(obj)
-}
-
-function toLiveTheme(data: ResumeThemeLiveData) {
-  return new LiveObject({
-    name: data.name,
-    colors: new LiveObject(data.colors),
-    fonts: new LiveObject(data.fonts),
-    layout: new LiveObject(data.layout),
-  })
-}
-
 export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
-  // TEMPORARY: Use mock data if enabled - delete after testing
-  const rawProfile = USE_MOCK_DATA
-    ? MOCK_PROFILE_DATA
-    : (initialData.resume_content_modified ?? initialData.resume_content)
-  const profile = normalizeProfile(rawProfile as ProfileLiveData)
-  const theme = USE_MOCK_DATA
-    ? (MOCK_THEME_DATA as ResumeThemeLiveData)
-    : (initialData.theme_data ?? defaultTheme)
+  // Use modified content if it exists, otherwise fall back to the enriched original.
+  // Both are stored as ResumeCanonical in Supabase — run through normalizeEnrichLayer
+  // to guarantee clean defaults, then hydrate into Liveblocks LiveObject/LiveList shape.
+  const rawResume = initialData.resume_content_modified ?? initialData.resume_content
+  const canonical = normalizeEnrichLayer(rawResume ?? {})
+  const profile = hydrateResumeLive(canonical)
+  const theme = (initialData.theme_data as ResumeThemeLiveData | null) ?? defaultTheme
 
   return (
     <LiveblocksProvider
@@ -121,9 +68,9 @@ export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
         id={`resume-${userId}`}
         initialPresence={{ cursor: null, selectedField: null }}
         initialStorage={{
-          profile: toLiveProfile(profile),
-          theme: toLiveTheme(theme),
-          settings: new LiveObject(defaultSettings),
+          profile,
+          theme,
+          settings: defaultSettings,
         }}
       >
         <ClientSideSuspense

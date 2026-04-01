@@ -1,59 +1,58 @@
-'use client'
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase/server"
+import { ProfileSnapshotCard } from "@/components/profile-snapshot-card"
+import type { ResumeCanonical } from "@/lib/normalize-enrichlayer"
 
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { ProfileSnapshotCard } from "@/components/profile-snapshot-card";
+// Mirrors the actual `people` table (setup_database.sql + 002_add_vanity_url.sql)
+export interface PersonRow {
+  id: string
+  email: string | null
+  resume_content: ResumeCanonical | null
+  resume_content_modified: ResumeCanonical | null
+  theme_data: Record<string, unknown> | null
+  plan: string | null
+  public_identifier: string | null
+  vanity_url: string | null
+  created_at: string
+  updated_at: string
+}
 
 export default async function ProfilePage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims) {
-    redirect("/auth/login");
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth/login")
   }
 
-  // Check if user exists in people table and has resume data
   const { data: personData } = await supabase
     .from("people")
     .select("*")
     .eq("id", user.id)
-    .single();
+    .single<PersonRow>()
 
-  // Only treat as "has resume" if resume_content contains actual profile data.
-  // The data could be in flat format { full_name, experiences, ... }
-  // OR wrapped format { profiles: [{ full_name, experiences, ... }] }
-  // Reject junk metadata (backwards_compatibility_notes) or empty payloads.
-  const raw = personData?.resume_content as Record<string, unknown> | null;
-  let hasResume = false;
-  if (
-    raw &&
-    typeof raw === "object" &&
-    !("backwards_compatibility_notes" in raw)
-  ) {
-    // Check flat format
-    if (raw.full_name || raw.first_name || Array.isArray(raw.experiences)) {
-      hasResume = true;
-    }
-    // Check wrapped { profiles: [...] } format
-    if (!hasResume && Array.isArray(raw.profiles) && raw.profiles.length > 0) {
-      const firstProfile = raw.profiles[0] as Record<string, unknown>;
-      if (
-        firstProfile?.full_name ||
-        firstProfile?.first_name ||
-        Array.isArray(firstProfile?.experiences)
-      ) {
-        hasResume = true;
-      }
-    }
-  }
+  // resume_content is always a flat ResumeCanonical — never a wrapped { profiles: [] } shape
+  const resume = personData?.resume_content ?? null
+  const hasResume = !!(
+    resume &&
+    (resume.full_name || (Array.isArray(resume.experiences) && resume.experiences.length > 0))
+  )
+
+  // Serialize Supabase objects to plain JSON before crossing the server→client boundary
+  const serializedUser = JSON.parse(JSON.stringify(user))
+  const serializedPersonData: PersonRow | null = personData
+    ? JSON.parse(JSON.stringify(personData))
+    : null
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-secondary/20 p-4">
       <ProfileSnapshotCard
-        user={user}
+        user={serializedUser}
         hasResume={hasResume}
-        personData={personData}
+        personData={serializedPersonData}
       />
     </div>
-  );
+  )
 }
-''''''

@@ -1,8 +1,7 @@
 "use client"
-6
-import {
-  u"seEffect, useState } from "react"
-  import { useRouter } from "next/navigation"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,18 +10,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import { FileText, Linkedin, CheckCircle2, Briefcase, GraduationCap, Award, Share2, MapPin, Mail } from "lucide-react"
 import { ShareDialog } from "@/components/share-dialog"
-import type { ProfileLiveData } from "@/lib/schemas"
-// TEMPORARY: Import mock data for testing - delete after testing
-import { MOCK_PROFILE_DATA, USE_MOCK_DATA } from "@/lib/mock-profile-data"
+import type { ResumeCanonical } from "@/lib/normalize-enrichlayer"
+import type { PersonRow } from "@/app/profile/page"
 
 interface ProfileSnapshotCardProps {
   user: User
   hasResume: boolean
-  personData: {
-    resume_content?: ProfileLiveData
-    public_identifier?: string
-    vanity_url?: string
-  } | null
+  personData: PersonRow | null
 }
 
 const containerVariants = {
@@ -51,40 +45,23 @@ const itemVariants = {
 }
 
 export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnapshotCardProps) {
-  // TEMPORARY: Use mock data if enabled - delete after testing
-  const effectiveHasResume = USE_MOCK_DATA ? true : hasResume
-  const [isLoading, setIsLoading] = useState(!effectiveHasResume)
+  const [isLoading, setIsLoading] = useState(!hasResume)
   const [error, setError] = useState<string | null>(null)
-  // Handle both flat and wrapped { profiles: [...] } formats from resume_content
-  const normalizeProfile = (data: unknown): ProfileLiveData | null => {
-    if (!data || typeof data !== "object") return null
-    const obj = data as Record<string, unknown>
-    // Wrapped format: { profiles: [{ full_name, ... }] }
-    if (Array.isArray(obj.profiles) && obj.profiles.length > 0) {
-      return obj.profiles[0] as ProfileLiveData
-    }
-    // Flat format: { full_name, experiences, ... }
-    if (obj.full_name || obj.first_name || Array.isArray(obj.experiences)) {
-      return obj as unknown as ProfileLiveData
-    }
-    return null
-  }
 
-  // TEMPORARY: Use mock data if enabled - delete after testing
-  const [profileData, setProfileData] = useState<ProfileLiveData | null>(
-    USE_MOCK_DATA ? (MOCK_PROFILE_DATA as unknown as ProfileLiveData) : (normalizeProfile(personData?.resume_content) || null)
+  // Initialize from stored ResumeCanonical if returning user already has enriched data
+  const [profileData, setProfileData] = useState<ResumeCanonical | null>(
+    personData?.resume_content ?? null
   )
+
   const [progress, setProgress] = useState(0)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    // TEMPORARY: Skip API call if using mock data - delete after testing
-    if (USE_MOCK_DATA) return
     if (!hasResume && !error) {
       fetchProfileData()
     }
-  }, [hasResume, error])
+  }, [hasResume])
 
   useEffect(() => {
     if (isLoading) {
@@ -116,7 +93,8 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
         throw new Error(data.error || "Failed to fetch profile data")
       }
 
-      setProfileData(data.profile)
+      // /api/enrich returns { profile: ResumeCanonical } via normalizeEnrichLayer()
+      setProfileData(data.profile as ResumeCanonical)
       setIsLoading(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
@@ -128,9 +106,14 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
     router.push(`/resume/${user.id}`)
   }
 
+  // Snapshot from LinkedIn OAuth user_metadata — always available immediately after login.
+  // Falls back to enriched ResumeCanonical fields once enrich completes.
   const displayName = user.user_metadata?.full_name || profileData?.full_name || "User"
-  const photoUrl = user.user_metadata?.avatar_url || profileData?.profile_pic_url
-  const headline = profileData?.headline || profileData?.occupation || user.user_metadata?.headline
+  const photoUrl = user.user_metadata?.avatar_url as string | undefined
+  const headline =
+    (user.user_metadata?.headline as string | undefined) ||
+    profileData?.headline ||
+    profileData?.occupation
   const email = user.email
   const location =
     profileData?.city && profileData?.country
@@ -138,13 +121,13 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
       : profileData?.city || profileData?.country
 
   const stats = [
-    { icon: Briefcase, label: "Experience", value: profileData?.experiences?.length || 0 },
-    { icon: GraduationCap, label: "Education", value: profileData?.education?.length || 0 },
-    { icon: Award, label: "Skills", value: profileData?.skills?.length || 0 },
+    { icon: Briefcase, label: "Experience", value: profileData?.experiences?.length ?? 0 },
+    { icon: GraduationCap, label: "Education", value: profileData?.education?.length ?? 0 },
+    { icon: Award, label: "Skills", value: profileData?.skills?.length ?? 0 },
   ]
 
   return (
-                                                                                                              <>
+    <>
       <motion.div initial="hidden" animate="visible" variants={containerVariants} className="w-full max-w-md">
         <Card className="overflow-hidden border-0 shadow-xl bg-gradient-to-b from-background to-muted/30">
           <CardContent className="p-0">
@@ -161,7 +144,7 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                     </div>
                   ) : (
                     <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
-                      <AvatarImage src={photoUrl || undefined} alt={displayName} />
+                      <AvatarImage src={photoUrl} alt={displayName} />
                       <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
                         {displayName
                           .split(" ")
@@ -243,4 +226,56 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                   >
                     <motion.div variants={itemVariants} className="flex items-center justify-center gap-2 text-primary">
                       <CheckCircle2 className="h-5 w-5" />
-                      "
+                      <span className="text-sm font-medium">Profile Synced</span>
+                    </motion.div>
+
+                    {/* Stats Grid */}
+                    <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3">
+                      {stats.map((stat) => (
+                        <motion.div
+                          key={stat.label}
+                          variants={itemVariants}
+                          className="rounded-xl bg-muted/50 p-3 text-center"
+                        >
+                          <stat.icon className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                          <p className="text-xl font-bold">{stat.value}</p>
+                          <p className="text-xs text-muted-foreground">{stat.label}</p>
+                        </motion.div>
+                      ))}
+                    </motion.div>
+
+                    {/* Action Buttons */}
+                    <motion.div variants={itemVariants} className="flex gap-3 pt-2">
+                      <Button className="flex-1" size="lg" onClick={handleViewResume}>
+                        <FileText className="mr-2 h-5 w-5" />
+                        View Resume
+                      </Button>
+                      <Button variant="outline" size="lg" onClick={() => setShowShareDialog(true)}>
+                        <Share2 className="h-5 w-5" />
+                      </Button>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <motion.div
+                variants={itemVariants}
+                className="flex items-center justify-center gap-2 pt-2 text-xs text-muted-foreground"
+              >
+                <Linkedin className="h-4 w-4 text-[#0A66C2]" />
+                <span>Powered by LinkedIn & EnrichLayer</span>
+              </motion.div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <ShareDialog
+        open={showShareDialog}
+        onOpenChange={setShowShareDialog}
+        vanityUrl={personData?.vanity_url || personData?.public_identifier || user.id}
+        userId={user.id}
+      />
+    </>
+  )
+}

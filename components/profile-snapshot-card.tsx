@@ -1,7 +1,8 @@
 "use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+6
+import {
+  u"seEffect, useState } from "react"
+  import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
@@ -143,7 +144,7 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
   ]
 
   return (
-    <>
+                                                                                                              <>
       <motion.div initial="hidden" animate="visible" variants={containerVariants} className="w-full max-w-md">
         <Card className="overflow-hidden border-0 shadow-xl bg-gradient-to-b from-background to-muted/30">
           <CardContent className="p-0">
@@ -242,56 +243,4 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                   >
                     <motion.div variants={itemVariants} className="flex items-center justify-center gap-2 text-primary">
                       <CheckCircle2 className="h-5 w-5" />
-                      <span className="text-sm font-medium">Profile Synced</span>
-                    </motion.div>
-
-                    {/* Stats Grid */}
-                    <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3">
-                      {stats.map((stat) => (
-                        <motion.div
-                          key={stat.label}
-                          variants={itemVariants}
-                          className="rounded-xl bg-muted/50 p-3 text-center"
-                        >
-                          <stat.icon className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                          <p className="text-xl font-bold">{stat.value}</p>
-                          <p className="text-xs text-muted-foreground">{stat.label}</p>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-
-                    {/* Action Buttons */}
-                    <motion.div variants={itemVariants} className="flex gap-3 pt-2">
-                      <Button className="flex-1" size="lg" onClick={handleViewResume}>
-                        <FileText className="mr-2 h-5 w-5" />
-                        View Resume
-                      </Button>
-                      <Button variant="outline" size="lg" onClick={() => setShowShareDialog(true)}>
-                        <Share2 className="h-5 w-5" />
-                      </Button>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <motion.div
-                variants={itemVariants}
-                className="flex items-center justify-center gap-2 pt-2 text-xs text-muted-foreground"
-              >
-                <Linkedin className="h-4 w-4 text-[#0A66C2]" />
-                <span>Powered by LinkedIn & EnrichLayer</span>
-              </motion.div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <ShareDialog
-        open={showShareDialog}
-        onOpenChange={setShowShareDialog}
-        vanityUrl={personData?.vanity_url || personData?.public_identifier || user.id}
-        userId={user.id}
-      />
-    </>
-  )
-}
+                      "

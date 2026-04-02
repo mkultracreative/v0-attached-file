@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import { FileText, Linkedin, CheckCircle2, Briefcase, GraduationCap, Award, Share2, MapPin, Mail } from "lucide-react"
 import { ShareDialog } from "@/components/share-dialog"
+import { createClient } from "@/lib/supabase/client"
 import type { ResumeCanonical } from "@/lib/normalize-enrichlayer"
 import type { PersonRow } from "@/app/profile/page"
 
@@ -100,6 +101,12 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
       setError(err instanceof Error ? err.message : "An error occurred")
       setIsLoading(false)
     }
+  }
+
+  const handleSignOutAndRetry = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    window.location.href = "/auth/login"
   }
 
   const handleViewResume = () => {
@@ -210,8 +217,11 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                     className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-center"
                   >
                     <p className="text-sm font-medium text-destructive">{error}</p>
-                    <Button variant="outline" size="sm" className="mt-3 bg-transparent" onClick={fetchProfileData}>
-                      Try Again
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Sign out and try logging in again — your email may not match a LinkedIn profile.
+                    </p>
+                    <Button variant="outline" size="sm" className="mt-3 bg-transparent" onClick={handleSignOutAndRetry}>
+                      Sign Out & Retry
                     </Button>
                   </motion.div>
                 )}

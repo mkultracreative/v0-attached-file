@@ -58,7 +58,10 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
   const router = useRouter()
 
   useEffect(() => {
-    if (!hasResume && !error) {
+    // Only call enrich if the server confirmed no resume_content exists.
+    // personData?.resume_content is a second safety net in case hasResume
+    // was computed incorrectly — we never want to burn API credits if data exists.
+    if (!hasResume && !personData?.resume_content && !error) {
       fetchProfileData()
     }
   }, [hasResume])
@@ -91,6 +94,14 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to fetch profile data")
+      }
+
+      // EnrichLayer couldn't match the email to a LinkedIn profile — not a crash,
+      // just nothing to show. Stop loading silently; user can retry manually later.
+      if (!data.success) {
+        console.warn("[enrich] No profile found:", data.reason)
+        setIsLoading(false)
+        return
       }
 
       // /api/enrich returns { profile: ResumeCanonical } via normalizeEnrichLayer()

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ResumeRoom } from "@/components/resume-room"
 import { ResumeViewer } from "@/components/resume-viewer"
+import type { PersonRow } from "@/app/profile/page"
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -19,8 +20,11 @@ export default async function ResumePage({ params }: PageProps) {
     redirect("/auth/login")
   }
 
-  // Fetch the resume data
-  const { data: personData } = await supabase.from("people").select("*").eq("id", id).single()
+  const { data: personData } = await supabase
+    .from("people")
+    .select("*")
+    .eq("user_id", id)
+    .single<PersonRow>()
 
   if (!personData?.resume_content) {
     redirect("/profile")
@@ -28,10 +32,13 @@ export default async function ResumePage({ params }: PageProps) {
 
   const isOwner = user.id === id
 
+  // Serialize to plain JSON before crossing the server→client boundary
+  const serializedPersonData: PersonRow = JSON.parse(JSON.stringify(personData))
+
   return (
     <ResumeRoom
       userId={id}
-      initialData={personData}
+      initialData={serializedPersonData}
       userInfo={{
         id: user.id,
         name: user.user_metadata?.full_name || user.email || "User",

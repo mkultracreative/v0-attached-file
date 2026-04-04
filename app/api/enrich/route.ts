@@ -90,13 +90,13 @@ export async function POST() {
     // Upsert into people table
     const { error: upsertError } = await supabase.from("people").upsert(
       {
-        id: user.id,
+        user_id: user.id,
         email,
         resume_content: canonical,
         resume_content_modified: canonical,
-        updated_at: new Date().toISOString(),
+        last_enriched_at: new Date().toISOString(),
       },
-      { onConflict: "id" }
+      { onConflict: "user_id" }
     )
 
     if (upsertError) {

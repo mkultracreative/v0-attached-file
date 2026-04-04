@@ -100,6 +100,7 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
       // just nothing to show. Stop loading silently; user can retry manually later.
       if (!data.success) {
         console.warn("[enrich] No profile found:", data.reason)
+        // Not a crash — just no match. Stop loading, buttons stay visible.
         setIsLoading(false)
         return
       }
@@ -226,13 +227,8 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                     animate="visible"
                     className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-center"
                   >
-                    <p className="text-sm font-medium text-destructive">{error}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Sign out and try logging in again — your email may not match a LinkedIn profile.
-                    </p>
-                    <Button variant="outline" size="sm" className="mt-3 bg-transparent" onClick={handleSignOutAndRetry}>
-                      Sign Out & Retry
-                    </Button>
+                    <p className="text-sm font-medium text-destructive">Could not sync profile</p>
+                    <p className="text-xs text-muted-foreground mt-1">Check Vercel logs for details.</p>
                   </motion.div>
                 )}
 

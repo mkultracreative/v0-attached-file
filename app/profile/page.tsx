@@ -5,14 +5,16 @@ import type { ResumeCanonical } from "@/lib/normalize-enrichlayer"
 
 // Mirrors the actual `people` table (setup_database.sql + 002_add_vanity_url.sql)
 export interface PersonRow {
-  id: string
+  id: string        // internal row uuid
+  user_id: string   // foreign key → auth.users.id — use this to match auth session
   email: string | null
+  public_identifier: string | null
+  vanity_url: string | null
   resume_content: ResumeCanonical | null
   resume_content_modified: ResumeCanonical | null
   theme_data: Record<string, unknown> | null
   plan: string | null
-  public_identifier: string | null
-  vanity_url: string | null
+  last_enriched_at: string | null
   created_at: string
   updated_at: string
 }
@@ -30,7 +32,7 @@ export default async function ProfilePage() {
   const { data: personData } = await supabase
     .from("people")
     .select("*")
-    .eq("id", user.id)
+    .eq("user_id", user.id)
     .single<PersonRow>()
 
   // hasResume=true  → resume_content has real data → ProfileSnapshotCard skips EnrichLayer

@@ -263,17 +263,29 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                         </motion.div>
                       ))}
                     </motion.div>
+                  </motion.div>
+                )}
 
-                    {/* Action Buttons */}
-                    <motion.div variants={itemVariants} className="flex gap-3 pt-2">
-                      <Button className="flex-1" size="lg" onClick={handleViewResume}>
-                        <FileText className="mr-2 h-5 w-5" />
-                        View Resume
-                      </Button>
-                      <Button variant="outline" size="lg" onClick={() => setShowShareDialog(true)}>
-                        <Share2 className="h-5 w-5" />
-                      </Button>
-                    </motion.div>
+                {/* Action buttons — always visible, disabled until profile data is ready */}
+                {!isLoading && !error && (
+                  <motion.div variants={itemVariants} className="flex gap-3 pt-2">
+                    <Button
+                      className="flex-1"
+                      size="lg"
+                      onClick={handleViewResume}
+                      disabled={!hasResume && !profileData}
+                    >
+                      <FileText className="mr-2 h-5 w-5" />
+                      View Resume
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => setShowShareDialog(true)}
+                      disabled={!hasResume && !profileData}
+                    >
+                      <Share2 className="h-5 w-5" />
+                    </Button>
                   </motion.div>
                 )}
               </AnimatePresence>

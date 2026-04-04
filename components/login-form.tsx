@@ -23,7 +23,7 @@ export function LoginForm({
   const handleSocialLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const supabase = createClient(); // No await here — returns client directly
+    const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
@@ -32,11 +32,11 @@ export function LoginForm({
         provider: "linkedin_oidc",
         options: {
           redirectTo: `${window.location.origin}/auth/callback?next=/profile`,
+          scopes: "openid profile email",
         },
       });
 
       if (error) throw error;
-      // No need to setIsLoading(false) on success — we're redirecting away
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
       setIsLoading(false);

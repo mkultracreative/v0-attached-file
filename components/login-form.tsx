@@ -32,7 +32,6 @@ export function LoginForm({
         provider: "linkedin_oidc",
         options: {
           redirectTo: `${window.location.origin}/auth/callback?next=/profile`,
-          scopes: "openid profile email",
         },
       });
 

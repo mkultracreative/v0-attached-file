@@ -1,105 +1,158 @@
 import { z } from "zod"
 
 /* ------------------------------------------------------------------
-   Canonical Resume Schema (UI-safe, no nulls, stable defaults)
-   ------------------------------------------------------------------ */
-
-   const DateModel = z
-     .object({
-         day: z.number().int().min(1).max(31).optional(),
-             month: z.number().int().min(1).max(12).optional(),
-                 year: z.number().int().optional(),
-                   })
-                     .optional()
-
-                     const Experience = z.object({
-                       company: z.string().default(""),
-                         title: z.string().default(""),
-                           description: z.string().default(""),
-                             location: z.string().default(""),
-                               logo_url: z.string().default(""),
-                                 starts_at: DateModel,
-                                   ends_at: DateModel,
-                                   })
-
-                                   const Education = z.object({
-                                     school: z.string().default(""),
-                                       degree_name: z.string().default(""),
-                                         field_of_study: z.string().default(""),
-                                           description: z.string().default(""),
-                                             logo_url: z.string().default(""),
- starts_at: DateModel,
-   ends_at: DateModel,
-   })
-
-   export const ResumeCanonicalSchema = z.object({
-     full_name: z.string().default(""),
-       headline: z.string().default(""),
-         summary: z.string().default(""),
-
-           city: z.string().default(""),
-             state: z.string().default(""),
-               country: z.string().default(""),
-
-                 occupation: z.string().default(""),
-
-                   skills: z.array(z.string()).default([]),
-                     languages: z.array(z.string()).default([]),
-                       interests: z.array(z.string()).default([]),
-
-                         experiences: z.array(Experience).default([]),
-                           education: z.array(Education).default([]),
-
-                             certifications: z.array(
-                                 z.object({
-                                       name: z.string().default(""),
-                                             authority: z.string().default(""),
-   }),
-     ).default([]),
-
-       projects: z.array(
-           z.object({
-                 title: z.string().default(""),
-                       description: z.string().default(""),
-                             url: z.string().default(""),
-                                 }),
-                                   ).default([]),
-
-                                     meta: z.object({
-                                         last_updated: z.string().default(""),
-                                           }).default({ last_updated: "" }),
-                                           })
-
-                                           export type ResumeCanonical = z.infer<typeof ResumeCanonicalSchema>
-
-                                           /* ------------------------------------------------------------------
-Normalizer (THIS replaces sanitizeProfile)
+   Every field is optional. EnrichLayer may return null, undefined,
+   or simply omit any field. Only public_identifier is the stable
+   unique key. Everything else coerces to a safe empty default.
 ------------------------------------------------------------------ */
 
+const s = z.string().nullish().transform(v => v ?? "")
+const n = z.number().nullish().transform(v => v ?? 0)
+
+const DateModel = z.object({
+  day:   z.number().nullish().transform(v => v ?? undefined),
+  month: z.number().nullish().transform(v => v ?? undefined),
+  year:  z.number().nullish().transform(v => v ?? undefined),
+}).nullish().transform(v => v ?? undefined)
+
+const Experience = z.object({
+  company:                      s,
+  company_linkedin_profile_url: s,
+  title:                        s,
+  description:                  s,
+  location:                     s,
+  logo_url:                     s,
+  starts_at:                    DateModel,
+  ends_at:                      DateModel,
+})
+
+const Education = z.object({
+  school:                      s,
+  school_linkedin_profile_url: s,
+  degree_name:                 s,
+  field_of_study:              s,
+  description:                 s,
+  logo_url:                    s,
+  grade:                       s,
+  activities_and_societies:    s,
+  starts_at:                   DateModel,
+  ends_at:                     DateModel,
+})
+
+const Certification = z.object({
+  name:           s,
+  authority:      s,
+  license_number: s,
+  display_source: s,
+  url:            s,
+  starts_at:      DateModel,
+  ends_at:        DateModel,
+})
+
+const Project = z.object({
+  title:       s,
+  description: s,
+  url:         s,
+  starts_at:   DateModel,
+  ends_at:     DateModel,
+})
+
+const VolunteerWork = z.object({
+  title:       s,
+  cause:       s,
+  company:     s,
+  description: s,
+  logo_url:    s,
+  starts_at:   DateModel,
+  ends_at:     DateModel,
+})
+
+const HonorAward = z.object({
+  title:       s,
+  issuer:      s,
+  description: s,
+  issued_on:   DateModel,
+})
+
+const Publication = z.object({
+  name:         s,
+  publisher:    s,
+  description:  s,
+  url:          s,
+  published_on: DateModel,
+})
+
+const arr = <T extends z.ZodTypeAny>(schema: T) =>
+  z.array(schema).nullish().transform(v => v ?? [])
+
+export const ResumeCanonicalSchema = z.object({
+  public_identifier:          s,
+  profile_pic_url:            s,
+  first_name:                 s,
+  last_name:                  s,
+  full_name:                  s,
+  headline:                   s,
+  summary:                    s,
+  occupation:                 s,
+
+  city:                       s,
+  state:                      s,
+  country:                    s,
+  country_full_name:          s,
+
+  connections:                n,
+  follower_count:             n,
+
+  skills:                     arr(s),
+  languages:                  arr(s),
+  interests:                  arr(s),
+  recommendations:            arr(s),
+
+  experiences:                arr(Experience),
+  education:                  arr(Education),
+  certifications:             arr(Certification),
+  volunteer_work:             arr(VolunteerWork),
+  accomplishment_projects:    arr(Project),
+  accomplishment_honors_awards: arr(HonorAward),
+  accomplishment_publications:  arr(Publication),
+  accomplishment_organisations: arr(z.object({ name: s, title: s, description: s, starts_at: DateModel, ends_at: DateModel })),
+  accomplishment_courses:     arr(z.object({ name: s, number: s })),
+  accomplishment_test_scores: arr(z.object({ name: s, score: s, description: s, date_on: DateModel })),
+  accomplishment_patents:     arr(z.object({ title: s, issuer: s, description: s, url: s, patent_number: s, application_number: s, issued_on: DateModel })),
+
+  people_also_viewed:         arr(z.object({ name: s, link: s, summary: s, location: s })),
+  similarly_named_profiles:   arr(z.object({ name: s, link: s, summary: s, location: s })),
+  activities:                 arr(z.object({ title: s, link: s, activity_status: s })),
+  articles:                   arr(z.object({ title: s, link: s, author: s, image_url: s, published_date: DateModel })),
+  groups:                     arr(z.object({ name: s, url: s, profile_pic_url: s })),
+
+  personal_emails:            arr(s),
+  personal_numbers:           arr(s),
+
+  extra: z.object({
+    github_profile_id:   s,
+    facebook_profile_id: s,
+    twitter_profile_id:  s,
+    website:             s,
+  }).nullish().transform(v => v ?? { github_profile_id: "", facebook_profile_id: "", twitter_profile_id: "", website: "" }),
+
+  inferred_salary: z.object({
+    min: z.number().nullish().transform(v => v ?? 0),
+    max: z.number().nullish().transform(v => v ?? 0),
+  }).nullish().transform(v => v ?? { min: 0, max: 0 }),
+
+  meta: z.object({
+    last_updated: s,
+  }).nullish().transform(v => v ?? { last_updated: "" }),
+})
+
+export type ResumeCanonical = z.infer<typeof ResumeCanonicalSchema>
+
+/* ------------------------------------------------------------------
+   Pass the raw EnrichLayer response directly — every null, undefined,
+   or missing field will be coerced to its empty default.
+------------------------------------------------------------------ */
 export function normalizeEnrichLayer(raw: unknown): ResumeCanonical {
   const data = (raw ?? {}) as Record<string, any>
-
-    return ResumeCanonicalSchema.parse({
-        full_name: data.full_name,
-            headline: data.headline,
-                summary: data.summary,
-
-                    city: data.city,
-                        state: data.state,
-                            country: data.country,
-
-                                occupation: data.occupation,
-
-                                    skills: data.skills,
-                                        languages: data.languages,
-                                            interests: data.interests,
-
-  experiences: data.experiences,
-      education: data.education,
-
-          certifications: data.certifications,
-              projects: data.accomplishment_projects,
-
-                  meta: data.meta,
-                    })
-                    }
+  return ResumeCanonicalSchema.parse(data)
+}

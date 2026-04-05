@@ -14,6 +14,7 @@ export async function POST(request: Request) {
 
     const { resumeContent, themeData } = await request.json()
 
+    // ✅ FIX: was `.eq("id", user.id)` — people table links via user_id, not id
     const { error: updateError } = await supabase
       .from("people")
       .update({
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
         theme_data: themeData,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", user.id)
+      .eq("user_id", user.id)
 
     if (updateError) {
       console.error("Database update error:", updateError)

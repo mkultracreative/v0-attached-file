@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { normalizeEnrichLayer } from "@/lib/normalize-enrichlayer"
 
 export async function POST() {
   try {
@@ -82,18 +81,15 @@ export async function POST() {
 
     const rawProfile = JSON.parse(step2Raw)
 
-    // Normalize into ResumeCanonical — fills all fields with empty defaults, no nulls
-    const canonical = normalizeEnrichLayer(rawProfile)
+    console.log("[enrich] Saving raw profile — full_name:", rawProfile?.full_name)
 
-    console.log("[enrich] Normalized — full_name:", canonical.full_name, "| experiences:", canonical.experiences.length)
-
-    // Upsert into people table
+    // Save raw response directly — no Zod transform, no data loss
     const { error: upsertError } = await supabase.from("people").upsert(
       {
         user_id: user.id,
         email,
-        resume_content: canonical,
-        resume_content_modified: canonical,
+        resume_content: rawProfile,
+        resume_content_modified: rawProfile,
         last_enriched_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }

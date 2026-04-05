@@ -1,158 +1,110 @@
-import { z } from "zod"
+import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 
-/* ------------------------------------------------------------------
-   Every field is optional. EnrichLayer may return null, undefined,
-   or simply omit any field. Only public_identifier is the stable
-   unique key. Everything else coerces to a safe empty default.
------------------------------------------------------------------- */
+export async function POST() {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-const s = z.string().nullish().transform(v => v ?? "")
-const n = z.number().nullish().transform(v => v ?? 0)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
-const DateModel = z.object({
-  day:   z.number().nullish().transform(v => v ?? undefined),
-  month: z.number().nullish().transform(v => v ?? undefined),
-  year:  z.number().nullish().transform(v => v ?? undefined),
-}).nullish().transform(v => v ?? undefined)
+    const email = user.email
+    if (!email) {
+      return NextResponse.json({ error: "No email on auth record" }, { status: 400 })
+    }
 
-const Experience = z.object({
-  company:                      s,
-  company_linkedin_profile_url: s,
-  title:                        s,
-  description:                  s,
-  location:                     s,
-  logo_url:                     s,
-  starts_at:                    DateModel,
-  ends_at:                      DateModel,
-})
+    const apiKey = process.env.ENRICHLAYER_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: "Missing ENRICHLAYER_API_KEY" }, { status: 500 })
+    }
 
-const Education = z.object({
-  school:                      s,
-  school_linkedin_profile_url: s,
-  degree_name:                 s,
-  field_of_study:              s,
-  description:                 s,
-  logo_url:                    s,
-  grade:                       s,
-  activities_and_societies:    s,
-  starts_at:                   DateModel,
-  ends_at:                     DateModel,
-})
+    // STEP 1 — Reverse email lookup
+    const step1Url = new URL("https://enrichlayer.com/api/v2/profile/resolve/email")
+    step1Url.searchParams.set("email", email)
+    step1Url.searchParams.set("lookup_depth", "deep")
+    step1Url.searchParams.set("enrich_profile", "skip")
 
-const Certification = z.object({
-  name:           s,
-  authority:      s,
-  license_number: s,
-  display_source: s,
-  url:            s,
-  starts_at:      DateModel,
-  ends_at:        DateModel,
-})
+    console.log("[enrich] Step 1 request:", step1Url.toString())
 
-const Project = z.object({
-  title:       s,
-  description: s,
-  url:         s,
-  starts_at:   DateModel,
-  ends_at:     DateModel,
-})
+    const step1Res = await fetch(step1Url.toString(), {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
 
-const VolunteerWork = z.object({
-  title:       s,
-  cause:       s,
-  company:     s,
-  description: s,
-  logo_url:    s,
-  starts_at:   DateModel,
-  ends_at:     DateModel,
-})
+    const step1Raw = await step1Res.text()
+    console.log("[enrich] Step 1 status:", step1Res.status)
+    console.log("[enrich] Step 1 response:", step1Raw)
 
-const HonorAward = z.object({
-  title:       s,
-  issuer:      s,
-  description: s,
-  issued_on:   DateModel,
-})
+    if (!step1Res.ok) {
+      return NextResponse.json({ error: "Step 1 failed", status: step1Res.status, raw: step1Raw }, { status: 502 })
+    }
 
-const Publication = z.object({
-  name:         s,
-  publisher:    s,
-  description:  s,
-  url:          s,
-  published_on: DateModel,
-})
+    const step1Data = JSON.parse(step1Raw)
+    const linkedinProfileUrl: string | null = step1Data?.linkedin_profile_url ?? null
 
-const arr = <T extends z.ZodTypeAny>(schema: T) =>
-  z.array(schema).nullish().transform(v => v ?? [])
+    if (!linkedinProfileUrl) {
+      console.warn("[enrich] Step 1 returned no linkedin_profile_url")
+      return NextResponse.json({ success: false, reason: "no_profile_found", step1: step1Data }, { status: 200 })
+    }
 
-export const ResumeCanonicalSchema = z.object({
-  public_identifier:          s,
-  profile_pic_url:            s,
-  first_name:                 s,
-  last_name:                  s,
-  full_name:                  s,
-  headline:                   s,
-  summary:                    s,
-  occupation:                 s,
+    // STEP 2 — Full profile fetch
+    await new Promise((resolve) => setTimeout(resolve, 1000))
 
-  city:                       s,
-  state:                      s,
-  country:                    s,
-  country_full_name:          s,
+    const step2Url = new URL("https://enrichlayer.com/api/v2/profile")
+    step2Url.searchParams.set("profile_url", linkedinProfileUrl)
+    step2Url.searchParams.set("extra", "include")
+    step2Url.searchParams.set("github_profile_id", "include")
+    step2Url.searchParams.set("facebook_profile_id", "include")
+    step2Url.searchParams.set("twitter_profile_id", "include")
+    step2Url.searchParams.set("personal_contact_number", "include")
+    step2Url.searchParams.set("personal_email", "include")
+    step2Url.searchParams.set("inferred_salary", "include")
+    step2Url.searchParams.set("skills", "include")
+    step2Url.searchParams.set("live_fetch", "force")
 
-  connections:                n,
-  follower_count:             n,
+    console.log("[enrich] Step 2 request:", step2Url.toString())
 
-  skills:                     arr(s),
-  languages:                  arr(s),
-  interests:                  arr(s),
-  recommendations:            arr(s),
+    const step2Res = await fetch(step2Url.toString(), {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
 
-  experiences:                arr(Experience),
-  education:                  arr(Education),
-  certifications:             arr(Certification),
-  volunteer_work:             arr(VolunteerWork),
-  accomplishment_projects:    arr(Project),
-  accomplishment_honors_awards: arr(HonorAward),
-  accomplishment_publications:  arr(Publication),
-  accomplishment_organisations: arr(z.object({ name: s, title: s, description: s, starts_at: DateModel, ends_at: DateModel })),
-  accomplishment_courses:     arr(z.object({ name: s, number: s })),
-  accomplishment_test_scores: arr(z.object({ name: s, score: s, description: s, date_on: DateModel })),
-  accomplishment_patents:     arr(z.object({ title: s, issuer: s, description: s, url: s, patent_number: s, application_number: s, issued_on: DateModel })),
+    const step2Raw = await step2Res.text()
+    console.log("[enrich] Step 2 status:", step2Res.status)
+    console.log("[enrich] Step 2 response:", step2Raw)
 
-  people_also_viewed:         arr(z.object({ name: s, link: s, summary: s, location: s })),
-  similarly_named_profiles:   arr(z.object({ name: s, link: s, summary: s, location: s })),
-  activities:                 arr(z.object({ title: s, link: s, activity_status: s })),
-  articles:                   arr(z.object({ title: s, link: s, author: s, image_url: s, published_date: DateModel })),
-  groups:                     arr(z.object({ name: s, url: s, profile_pic_url: s })),
+    if (!step2Res.ok) {
+      return NextResponse.json({ error: "Step 2 failed", status: step2Res.status, raw: step2Raw }, { status: 502 })
+    }
 
-  personal_emails:            arr(s),
-  personal_numbers:           arr(s),
+    const rawProfile = JSON.parse(step2Raw)
 
-  extra: z.object({
-    github_profile_id:   s,
-    facebook_profile_id: s,
-    twitter_profile_id:  s,
-    website:             s,
-  }).nullish().transform(v => v ?? { github_profile_id: "", facebook_profile_id: "", twitter_profile_id: "", website: "" }),
+    console.log("[enrich] Saving raw profile — full_name:", rawProfile?.full_name)
 
-  inferred_salary: z.object({
-    min: z.number().nullish().transform(v => v ?? 0),
-    max: z.number().nullish().transform(v => v ?? 0),
-  }).nullish().transform(v => v ?? { min: 0, max: 0 }),
+    // Save raw response directly — no Zod transform, no data loss
+    const { error: upsertError } = await supabase.from("people").upsert(
+      {
+        user_id: user.id,
+        email,
+        resume_content: rawProfile,
+        resume_content_modified: rawProfile,
+        last_enriched_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    )
 
-  meta: z.object({
-    last_updated: s,
-  }).nullish().transform(v => v ?? { last_updated: "" }),
-})
+    if (upsertError) {
+      console.error("[enrich] Supabase upsert error:", upsertError)
+      return NextResponse.json({ error: "Failed to save profile", detail: upsertError.message }, { status: 500 })
+    }
 
-export type ResumeCanonical = z.infer<typeof ResumeCanonicalSchema>
+    console.log("[enrich] Saved for user:", user.id)
+    return NextResponse.json({ success: true, profile: canonical })
 
-/* ------------------------------------------------------------------
-   Pass the raw EnrichLayer response directly — every null, undefined,
-   or missing field will be coerced to its empty default.
------------------------------------------------------------------- */
-export function normalizeEnrichLayer(raw: unknown): ResumeCanonical {
-  const data = (raw ?? {}) as Record<string, any>
-  return ResumeCanonicalSchema.parse(data)
+  } catch (err) {
+    console.error("[enrich] Unhandled error:", err)
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 })
+  }
 }

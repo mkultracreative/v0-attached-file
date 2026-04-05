@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server"
 export async function POST() {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -38,7 +40,10 @@ export async function POST() {
     console.log("[enrich] Step 1 response:", step1Raw)
 
     if (!step1Res.ok) {
-      return NextResponse.json({ error: "Step 1 failed", status: step1Res.status, raw: step1Raw }, { status: 502 })
+      return NextResponse.json(
+        { error: "Step 1 failed", status: step1Res.status, raw: step1Raw },
+        { status: 502 }
+      )
     }
 
     const step1Data = JSON.parse(step1Raw)
@@ -46,7 +51,10 @@ export async function POST() {
 
     if (!linkedinProfileUrl) {
       console.warn("[enrich] Step 1 returned no linkedin_profile_url")
-      return NextResponse.json({ success: false, reason: "no_profile_found", step1: step1Data }, { status: 200 })
+      return NextResponse.json(
+        { success: false, reason: "no_profile_found", step1: step1Data },
+        { status: 200 }
+      )
     }
 
     // STEP 2 — Full profile fetch
@@ -73,17 +81,19 @@ export async function POST() {
 
     const step2Raw = await step2Res.text()
     console.log("[enrich] Step 2 status:", step2Res.status)
-    console.log("[enrich] Step 2 response:", step2Raw)
+    console.log("[enrich] Step 2 response (truncated):", step2Raw.slice(0, 500))
 
     if (!step2Res.ok) {
-      return NextResponse.json({ error: "Step 2 failed", status: step2Res.status, raw: step2Raw }, { status: 502 })
+      return NextResponse.json(
+        { error: "Step 2 failed", status: step2Res.status, raw: step2Raw },
+        { status: 502 }
+      )
     }
 
     const rawProfile = JSON.parse(step2Raw)
-
     console.log("[enrich] Saving raw profile — full_name:", rawProfile?.full_name)
 
-    // Save raw response directly — no Zod transform, no data loss
+    // Save raw response directly — upsert keyed on user_id
     const { error: upsertError } = await supabase.from("people").upsert(
       {
         user_id: user.id,
@@ -97,14 +107,21 @@ export async function POST() {
 
     if (upsertError) {
       console.error("[enrich] Supabase upsert error:", upsertError)
-      return NextResponse.json({ error: "Failed to save profile", detail: upsertError.message }, { status: 500 })
+      return NextResponse.json(
+        { error: "Failed to save profile", detail: upsertError.message },
+        { status: 500 }
+      )
     }
 
     console.log("[enrich] Saved for user:", user.id)
-    return NextResponse.json({ success: true, profile: canonical })
 
+    // ✅ FIX: was `canonical` (undefined variable) — now correctly returns rawProfile
+    return NextResponse.json({ success: true, profile: rawProfile })
   } catch (err) {
     console.error("[enrich] Unhandled error:", err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    )
   }
 }

@@ -162,7 +162,7 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                     </div>
                   ) : (
                     <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
-                      <AvatarImage src={photoUrl?} alt={displayName} />
+                      <AvatarImage src={photoUrl} alt={displayName} />
                       <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
                         {displayName
                           .split(" ")

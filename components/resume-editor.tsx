@@ -29,84 +29,81 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
   const profile = useStorage((root) => root.profile)
   const theme = useStorage((root) => root.theme)
 
-  // Mutations for updating storage
   const updateField = useMutation(({ storage }, field: string, value: unknown) => {
     const profileStorage = storage.get("profile")
-    if (profileStorage) {
-      // Handle nested paths like "experiences[0].title"
-      const pathParts = field.split(".")
-      // For simple top-level fields
-      if (pathParts.length === 1) {
-        ;(profileStorage as Record<string, unknown>)[field] = value
-      }
+    if (profileStorage && typeof profileStorage.set === "function") {
+      profileStorage.set(field as any, value)
     }
   }, [])
 
   const updateExperience = useMutation(({ storage }, index: number, field: string, value: string) => {
-    const profileStorage = storage.get("profile")
-    if (profileStorage && profileStorage.experiences) {
-      profileStorage.experiences[index] = {
-        ...profileStorage.experiences[index],
-        [field]: value,
-      }
+    const p = storage.get("profile")
+    if (!p) return
+    const list = p.get("experiences" as any)
+    if (list && typeof list.get === "function") {
+      const item = list.get(index)
+      if (item && typeof item.set === "function") item.set(field as any, value)
     }
   }, [])
 
   const updateEducation = useMutation(({ storage }, index: number, field: string, value: string) => {
-    const profileStorage = storage.get("profile")
-    if (profileStorage && profileStorage.education) {
-      profileStorage.education[index] = {
-        ...profileStorage.education[index],
-        [field]: value,
-      }
+    const p = storage.get("profile")
+    if (!p) return
+    const list = p.get("education" as any)
+    if (list && typeof list.get === "function") {
+      const item = list.get(index)
+      if (item && typeof item.set === "function") item.set(field as any, value)
     }
   }, [])
 
   const addExperience = useMutation(({ storage }) => {
-    const profileStorage = storage.get("profile")
-    if (profileStorage) {
-      profileStorage.experiences = [
-        ...(profileStorage.experiences || []),
-        {
-          company: "",
-          title: "",
-          description: "",
-          location: "",
-          starts_at: { year: new Date().getFullYear() },
-          ends_at: null,
-        },
-      ]
+    const p = storage.get("profile")
+    if (!p) return
+    const list = p.get("experiences" as any)
+    if (list && typeof list.push === "function") {
+      const { LiveObject } = require("@liveblocks/client")
+      list.push(new LiveObject({
+        company: "",
+        title: "",
+        description: "",
+        location: "",
+        logo_url: "",
+        starts_at: new LiveObject({ year: new Date().getFullYear(), month: 1 }),
+        ends_at: null,
+      }))
     }
   }, [])
 
   const removeExperience = useMutation(({ storage }, index: number) => {
-    const profileStorage = storage.get("profile")
-    if (profileStorage && profileStorage.experiences) {
-      profileStorage.experiences = profileStorage.experiences.filter((_, i) => i !== index)
-    }
+    const p = storage.get("profile")
+    if (!p) return
+    const list = p.get("experiences" as any)
+    if (list && typeof list.delete === "function") list.delete(index)
   }, [])
 
   const addEducation = useMutation(({ storage }) => {
-    const profileStorage = storage.get("profile")
-    if (profileStorage) {
-      profileStorage.education = [
-        ...(profileStorage.education || []),
-        {
-          school: "",
-          degree_name: "",
-          field_of_study: "",
-          starts_at: { year: new Date().getFullYear() },
-          ends_at: null,
-        },
-      ]
+    const p = storage.get("profile")
+    if (!p) return
+    const list = p.get("education" as any)
+    if (list && typeof list.push === "function") {
+      const { LiveObject } = require("@liveblocks/client")
+      list.push(new LiveObject({
+        school: "",
+        degree_name: "",
+        field_of_study: "",
+        description: "",
+        logo_url: "",
+        starts_at: new LiveObject({ year: new Date().getFullYear(), month: 1 }),
+        ends_at: null,
+      }))
     }
   }, [])
 
   const removeEducation = useMutation(({ storage }, index: number) => {
-    const profileStorage = storage.get("profile")
-    if (profileStorage && profileStorage.education) {
-      profileStorage.education = profileStorage.education.filter((_, i) => i !== index)
-    }
+    const p = storage.get("profile")
+    if (!p) return
+    const list = p.get("education" as any)
+    if (list && typeof list.delete === "function") list.delete(index)
   }, [])
 
   const handleSave = useCallback(async () => {
@@ -153,7 +150,6 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Active users */}
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <div className="flex -space-x-2">
@@ -205,7 +201,7 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
                     <div>
                       <label className="mb-1 block text-sm font-medium">First Name</label>
                       <Input
-                        value={profile.first_name || ""}
+                        value={(profile as any).first_name || ""}
                         onChange={(e) => updateField("first_name", e.target.value)}
                         onFocus={() => setActiveSection("basic")}
                       />
@@ -213,7 +209,7 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
                     <div>
                       <label className="mb-1 block text-sm font-medium">Last Name</label>
                       <Input
-                        value={profile.last_name || ""}
+                        value={(profile as any).last_name || ""}
                         onChange={(e) => updateField("last_name", e.target.value)}
                         onFocus={() => setActiveSection("basic")}
                       />
@@ -222,7 +218,7 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
                   <div>
                     <label className="mb-1 block text-sm font-medium">Headline</label>
                     <Input
-                      value={profile.headline || ""}
+                      value={(profile as any).headline || ""}
                       onChange={(e) => updateField("headline", e.target.value)}
                       onFocus={() => setActiveSection("basic")}
                     />
@@ -230,7 +226,7 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
                   <div>
                     <label className="mb-1 block text-sm font-medium">Summary</label>
                     <Textarea
-                      value={profile.summary || ""}
+                      value={(profile as any).summary || ""}
                       onChange={(e) => updateField("summary", e.target.value)}
                       onFocus={() => setActiveSection("basic")}
                       rows={4}
@@ -239,12 +235,15 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-sm font-medium">City</label>
-                      <Input value={profile.city || ""} onChange={(e) => updateField("city", e.target.value)} />
+                      <Input
+                        value={(profile as any).city || ""}
+                        onChange={(e) => updateField("city", e.target.value)}
+                      />
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium">Country</label>
                       <Input
-                        value={profile.country_full_name || profile.country || ""}
+                        value={(profile as any).country_full_name || (profile as any).country || ""}
                         onChange={(e) => updateField("country_full_name", e.target.value)}
                       />
                     </div>
@@ -264,7 +263,7 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
                   </Button>
                 </div>
                 <div className="space-y-6">
-                  {profile.experiences?.map((exp, index) => (
+                  {((profile as any).experiences || []).map((exp: any, index: number) => (
                     <div
                       key={index}
                       className="relative rounded-lg border border-border p-4"
@@ -331,7 +330,7 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
                   </Button>
                 </div>
                 <div className="space-y-6">
-                  {profile.education?.map((edu, index) => (
+                  {((profile as any).education || []).map((edu: any, index: number) => (
                     <div
                       key={index}
                       className="relative rounded-lg border border-border p-4"
@@ -384,7 +383,7 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
               <CardContent className="pt-6">
                 <h2 className="mb-4 text-lg font-semibold">Skills</h2>
                 <div className="flex flex-wrap gap-2">
-                  {profile.skills?.map((skill, index) => (
+                  {((profile as any).skills || []).map((skill: string, index: number) => (
                     <span key={index} className="rounded-full bg-secondary px-3 py-1 text-sm">
                       {skill}
                     </span>
@@ -399,14 +398,14 @@ export function ResumeEditor({ userId }: ResumeEditorProps) {
         {showPreview && (
           <div className="w-1/2 border-l border-border bg-background p-6">
             <div className="sticky top-20">
-              <ResumePreview profile={profile} theme={theme} />
+              <ResumePreview profile={profile as any} theme={theme} />
             </div>
           </div>
         )}
       </div>
 
-      {/* Floating Toolbar */}
-      <FloatingToolbar activeSection={activeSection} />
+      {/* ✅ FIX: was <FloatingToolbar activeSection={activeSection} /> — wrong prop, expects userId */}
+      <FloatingToolbar userId={userId} />
     </div>
   )
 }

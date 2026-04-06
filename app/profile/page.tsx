@@ -38,11 +38,9 @@ export default async function ProfilePage() {
   // hasResume=true  → resume_content has real data → ProfileSnapshotCard skips EnrichLayer
   // hasResume=false → resume_content is null/empty    → ProfileSnapshotCard triggers /api/enrich
   // ResumeCanonical is always flat — never a { profiles: [...] } wrapper
-  const resume = personData?.resume_content ?? null
-  const hasResume = !!(
-    resume &&
-    (resume.full_name || (Array.isArray(resume.experiences) && resume.experiences.length > 0))
-  )
+  // resume_content is raw EnrichLayer JSON — check any real field
+  const resume = personData?.resume_content as Record<string, unknown> | null
+  const hasResume = !!(resume && (resume.full_name || resume.public_identifier))
 
   // Serialize Supabase objects to plain JSON before crossing the server→client boundary
   const serializedUser = JSON.parse(JSON.stringify(user))

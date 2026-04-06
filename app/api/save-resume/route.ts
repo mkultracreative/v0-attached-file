@@ -4,9 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -14,7 +12,6 @@ export async function POST(request: Request) {
 
     const { resumeContent, themeData } = await request.json()
 
-    // ✅ FIX: was `.eq("id", user.id)` — people table links via user_id, not id
     const { error: updateError } = await supabase
       .from("people")
       .update({
@@ -25,13 +22,13 @@ export async function POST(request: Request) {
       .eq("user_id", user.id)
 
     if (updateError) {
-      console.error("Database update error:", updateError)
+      console.error("[save-resume] update error:", updateError)
       return NextResponse.json({ error: "Failed to save resume" }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Save resume error:", error)
+    console.error("[save-resume] error:", error)
     return NextResponse.json({ error: "Failed to save resume" }, { status: 500 })
   }
 }

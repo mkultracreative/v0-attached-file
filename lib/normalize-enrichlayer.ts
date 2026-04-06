@@ -24,7 +24,7 @@ const Experience = z.object({
   logo_url:                     s,
   starts_at:                    DateModel,
   ends_at:                      DateModel,
-})
+}).passthrough() // allow extra fields from raw EnrichLayer without throwing
 
 const Education = z.object({
   school:                      s,
@@ -37,7 +37,7 @@ const Education = z.object({
   activities_and_societies:    s,
   starts_at:                   DateModel,
   ends_at:                     DateModel,
-})
+}).passthrough()
 
 const Certification = z.object({
   name:           s,
@@ -47,7 +47,7 @@ const Certification = z.object({
   url:            s,
   starts_at:      DateModel,
   ends_at:        DateModel,
-})
+}).passthrough()
 
 const Project = z.object({
   title:       s,
@@ -55,7 +55,7 @@ const Project = z.object({
   url:         s,
   starts_at:   DateModel,
   ends_at:     DateModel,
-})
+}).passthrough()
 
 const VolunteerWork = z.object({
   title:       s,
@@ -65,14 +65,14 @@ const VolunteerWork = z.object({
   logo_url:    s,
   starts_at:   DateModel,
   ends_at:     DateModel,
-})
+}).passthrough()
 
 const HonorAward = z.object({
   title:       s,
   issuer:      s,
   description: s,
   issued_on:   DateModel,
-})
+}).passthrough()
 
 const Publication = z.object({
   name:         s,
@@ -80,10 +80,13 @@ const Publication = z.object({
   description:  s,
   url:          s,
   published_on: DateModel,
-})
+}).passthrough()
 
 const arr = <T extends z.ZodTypeAny>(schema: T) =>
-  z.array(schema).nullish().transform(v => v ?? [])
+  z.preprocess(
+    (v) => (Array.isArray(v) ? v : []),
+    z.array(schema).catch([])
+  )
 
 export const ResumeCanonicalSchema = z.object({
   public_identifier:          s,
@@ -115,16 +118,16 @@ export const ResumeCanonicalSchema = z.object({
   accomplishment_projects:    arr(Project),
   accomplishment_honors_awards: arr(HonorAward),
   accomplishment_publications:  arr(Publication),
-  accomplishment_organisations: arr(z.object({ name: s, title: s, description: s, starts_at: DateModel, ends_at: DateModel })),
-  accomplishment_courses:     arr(z.object({ name: s, number: s })),
-  accomplishment_test_scores: arr(z.object({ name: s, score: s, description: s, date_on: DateModel })),
-  accomplishment_patents:     arr(z.object({ title: s, issuer: s, description: s, url: s, patent_number: s, application_number: s, issued_on: DateModel })),
+  accomplishment_organisations: arr(z.object({ name: s, title: s, description: s, starts_at: DateModel, ends_at: DateModel }).passthrough()),
+  accomplishment_courses:     arr(z.object({ name: s, number: s }).passthrough()),
+  accomplishment_test_scores: arr(z.object({ name: s, score: s, description: s, date_on: DateModel }).passthrough()),
+  accomplishment_patents:     arr(z.object({ title: s, issuer: s, description: s, url: s, patent_number: s, application_number: s, issued_on: DateModel }).passthrough()),
 
-  people_also_viewed:         arr(z.object({ name: s, link: s, summary: s, location: s })),
-  similarly_named_profiles:   arr(z.object({ name: s, link: s, summary: s, location: s })),
-  activities:                 arr(z.object({ title: s, link: s, activity_status: s })),
-  articles:                   arr(z.object({ title: s, link: s, author: s, image_url: s, published_date: DateModel })),
-  groups:                     arr(z.object({ name: s, url: s, profile_pic_url: s })),
+  people_also_viewed:         arr(z.object({ name: s, link: s, summary: s, location: s }).passthrough()),
+  similarly_named_profiles:   arr(z.object({ name: s, link: s, summary: s, location: s }).passthrough()),
+  activities:                 arr(z.object({ title: s, link: s, activity_status: s }).passthrough()),
+  articles:                   arr(z.object({ title: s, link: s, author: s, image_url: s, published_date: DateModel }).passthrough()),
+  groups:                     arr(z.object({ name: s, url: s, profile_pic_url: s }).passthrough()),
 
   personal_emails:            arr(s),
   personal_numbers:           arr(s),
@@ -134,7 +137,7 @@ export const ResumeCanonicalSchema = z.object({
     facebook_profile_id: s,
     twitter_profile_id:  s,
     website:             s,
-  }).nullish().transform(v => v ?? { github_profile_id: "", facebook_profile_id: "", twitter_profile_id: "", website: "" }),
+  }).passthrough().nullish().transform(v => v ?? { github_profile_id: "", facebook_profile_id: "", twitter_profile_id: "", website: "" }),
 
   inferred_salary: z.object({
     min: z.number().nullish().transform(v => v ?? 0),
@@ -144,15 +147,26 @@ export const ResumeCanonicalSchema = z.object({
   meta: z.object({
     last_updated: s,
   }).nullish().transform(v => v ?? { last_updated: "" }),
-})
+}).passthrough() // allow any extra top-level fields from raw EnrichLayer
 
 export type ResumeCanonical = z.infer<typeof ResumeCanonicalSchema>
 
 /* ------------------------------------------------------------------
-   Pass the raw EnrichLayer response directly — every null, undefined,
-   or missing field will be coerced to its empty default.
+   Always safe — uses safeParse and falls back to empty defaults.
+   Never throws, even if `raw` is malformed or totally unexpected.
 ------------------------------------------------------------------ */
 export function normalizeEnrichLayer(raw: unknown): ResumeCanonical {
-  const data = (raw ?? {}) as Record<string, any>
-  return ResumeCanonicalSchema.parse(data)
+  const data = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+
+  const result = ResumeCanonicalSchema.safeParse(data)
+
+  if (result.success) {
+    return result.data
+  }
+
+  console.error("[normalizeEnrichLayer] Schema parse failed, falling back to empty:", result.error.flatten())
+
+  // Hard fallback — parse an empty object which will always succeed
+  // because every field has a nullish transform with a default
+  return ResumeCanonicalSchema.parse({})
 }

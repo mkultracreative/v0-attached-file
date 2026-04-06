@@ -1,52 +1,95 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { ResumeRoom } from "@/components/resume-room"
-import { ResumeViewer } from "@/components/resume-viewer"
+"use client"
+
+import type { ReactNode } from "react"
+import {
+  LiveblocksProvider,
+  RoomProvider,
+  ClientSideSuspense,
+} from "@liveblocks/react/suspense"
+import { Loader2 } from "lucide-react"
+import type { ResumeThemeLiveData, SettingsLiveData } from "@/lib/schemas"
+import { normalizeEnrichLayer } from "@/lib/normalize-enrichlayer"
+import { hydrateResumeLive } from "@/lib/hydrate-resume-live"
 import type { PersonRow } from "@/app/profile/page"
 
-interface PageProps {
-  params: Promise<{ id: string }>
+interface UserInfo {
+  id: string
+  name: string
+  email: string
+  avatar?: string
 }
 
-export default async function ResumePage({ params }: PageProps) {
-  const { id } = await params
-  const supabase = await createClient()
+interface ResumeRoomProps {
+  children: ReactNode
+  userId: string
+  initialData: PersonRow
+  userInfo: UserInfo
+}
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+const defaultTheme: ResumeThemeLiveData = {
+  name: "Classic",
+  colors: {
+    primary: "#1a1a1a",
+    secondary: "#666666",
+    accent: "#0066cc",
+    background: "#ffffff",
+    text: "#1a1a1a",
+  },
+  fonts: { heading: "Inter", body: "Inter" },
+  layout: { spacing: "comfortable", borderRadius: "sm" },
+}
 
-  if (!user) {
-    redirect("/auth/login")
+const defaultSettings: SettingsLiveData = {
+  isEditMode: false,
+  lastModified: new Date().toISOString(),
+}
+
+export function ResumeRoom({ children, userId, initialData }: ResumeRoomProps) {
+  const rawResume = initialData.resume_content_modified ?? initialData.resume_content
+
+  // Use safeParse so a bad data shape never crashes the client with a ZodError.
+  // Falls back to an empty-but-valid canonical object on failure.
+  let canonical
+  try {
+    canonical = normalizeEnrichLayer(rawResume ?? {})
+  } catch (err) {
+    console.error("[ResumeRoom] normalizeEnrichLayer failed, using empty fallback:", err)
+    canonical = normalizeEnrichLayer({})
   }
 
-  const { data: personData } = await supabase
-    .from("people")
-    .select("*")
-    .eq("user_id", id)
-    .single<PersonRow>()
-
-  if (!personData?.resume_content) {
-    redirect("/profile")
-  }
-
-  const isOwner = user.id === id
-
-  // Serialize to plain JSON before crossing the server→client boundary
-  const serializedPersonData: PersonRow = JSON.parse(JSON.stringify(personData))
+  const profile = hydrateResumeLive(canonical)
+  const theme = (initialData.theme_data as ResumeThemeLiveData | null) ?? defaultTheme
 
   return (
-    <ResumeRoom
-      userId={id}
-      initialData={serializedPersonData}
-      userInfo={{
-        id: user.id,
-        name: user.user_metadata?.full_name || user.email || "User",
-        email: user.email || "",
-        avatar: user.user_metadata?.avatar_url,
+    <LiveblocksProvider
+      authEndpoint={async () => {
+        const res = await fetch("/api/liveblocks-auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ room: `resume-${userId}` }),
+        })
+        return res.json()
       }}
     >
-      <ResumeViewer isOwner={isOwner} userId={id} />
-    </ResumeRoom>
+      <RoomProvider
+        id={`resume-${userId}`}
+        initialPresence={{ cursor: null, selectedField: null }}
+        initialStorage={{
+          profile,
+          theme,
+          settings: defaultSettings,
+        }}
+      >
+        <ClientSideSuspense
+          fallback={
+            <div className="flex min-h-screen items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          }
+        >
+          {children}
+        </ClientSideSuspense>
+      </RoomProvider>
+    </LiveblocksProvider>
   )
 }

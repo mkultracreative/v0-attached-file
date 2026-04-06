@@ -4,9 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 export async function POST() {
   try {
     const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -28,7 +26,7 @@ export async function POST() {
     step1Url.searchParams.set("lookup_depth", "deep")
     step1Url.searchParams.set("enrich_profile", "skip")
 
-    console.log("[enrich] Step 1 request:", step1Url.toString())
+    console.log("[enrich] Step 1:", step1Url.toString())
 
     const step1Res = await fetch(step1Url.toString(), {
       method: "GET",
@@ -40,22 +38,18 @@ export async function POST() {
     console.log("[enrich] Step 1 response:", step1Raw)
 
     if (!step1Res.ok) {
-      return NextResponse.json(
-        { error: "Step 1 failed", status: step1Res.status, raw: step1Raw },
-        { status: 502 }
-      )
+      return NextResponse.json({ error: "Step 1 failed", status: step1Res.status, raw: step1Raw }, { status: 502 })
     }
 
     const step1Data = JSON.parse(step1Raw)
     const linkedinProfileUrl: string | null = step1Data?.linkedin_profile_url ?? null
 
     if (!linkedinProfileUrl) {
-      console.warn("[enrich] Step 1 returned no linkedin_profile_url")
-      return NextResponse.json(
-        { success: false, reason: "no_profile_found", step1: step1Data },
-        { status: 200 }
-      )
+      console.warn("[enrich] Step 1: no linkedin_profile_url for email:", email)
+      return NextResponse.json({ success: false, reason: "no_profile_found", step1: step1Data }, { status: 200 })
     }
+
+    console.log("[enrich] Step 1 resolved:", linkedinProfileUrl)
 
     // STEP 2 — Full profile fetch
     await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -72,7 +66,7 @@ export async function POST() {
     step2Url.searchParams.set("skills", "include")
     step2Url.searchParams.set("live_fetch", "force")
 
-    console.log("[enrich] Step 2 request:", step2Url.toString())
+    console.log("[enrich] Step 2:", step2Url.toString())
 
     const step2Res = await fetch(step2Url.toString(), {
       method: "GET",
@@ -81,25 +75,26 @@ export async function POST() {
 
     const step2Raw = await step2Res.text()
     console.log("[enrich] Step 2 status:", step2Res.status)
-    console.log("[enrich] Step 2 response (truncated):", step2Raw.slice(0, 500))
+    console.log("[enrich] Step 2 response:", step2Raw)
 
     if (!step2Res.ok) {
-      return NextResponse.json(
-        { error: "Step 2 failed", status: step2Res.status, raw: step2Raw },
-        { status: 502 }
-      )
+      return NextResponse.json({ error: "Step 2 failed", status: step2Res.status, raw: step2Raw }, { status: 502 })
     }
 
+    // Parse to object — never stringify before passing to Supabase.
+    // Supabase client handles JSONB serialization internally.
+    // Double-stringifying causes it to be stored as a text string instead of JSONB.
     const rawProfile = JSON.parse(step2Raw)
-    console.log("[enrich] Saving raw profile — full_name:", rawProfile?.full_name)
 
-    // Save raw response directly — upsert keyed on user_id
+    console.log("[enrich] Saving — full_name:", rawProfile?.full_name)
+
     const { error: upsertError } = await supabase.from("people").upsert(
       {
         user_id: user.id,
         email,
         resume_content: rawProfile,
         resume_content_modified: rawProfile,
+        public_identifier: rawProfile?.public_identifier ?? null,
         last_enriched_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
@@ -107,21 +102,14 @@ export async function POST() {
 
     if (upsertError) {
       console.error("[enrich] Supabase upsert error:", upsertError)
-      return NextResponse.json(
-        { error: "Failed to save profile", detail: upsertError.message },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: "Failed to save profile", detail: upsertError.message }, { status: 500 })
     }
 
     console.log("[enrich] Saved for user:", user.id)
-
-    // ✅ FIX: was `canonical` (undefined variable) — now correctly returns rawProfile
     return NextResponse.json({ success: true, profile: rawProfile })
+
   } catch (err) {
     console.error("[enrich] Unhandled error:", err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 })
   }
 }

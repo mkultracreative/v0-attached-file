@@ -31,9 +31,12 @@ export async function POST(request: Request) {
   // Give the user full access to their own room
   session.allow(`resume-${user.id}`, session.FULL_ACCESS)
 
-  // If room is provided, also allow access to that room
-  if (room) {
-    session.allow(room, session.FULL_ACCESS)
+  // If room is provided and it's a different user's resume, allow read access
+  if (room && room !== `resume-${user.id}`) {
+    // For resume rooms belonging to others, grant read access so they can view
+    if (room.startsWith("resume-")) {
+      session.allow(room, session.READ_ACCESS)
+    }
   }
 
   const { status, body } = await session.authorize()

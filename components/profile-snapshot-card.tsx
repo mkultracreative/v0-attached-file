@@ -100,12 +100,11 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
       // just nothing to show. Stop loading silently; user can retry manually later.
       if (!data.success) {
         console.warn("[enrich] No profile found:", data.reason)
-        // Not a crash — just no match. Stop loading, buttons stay visible.
         setIsLoading(false)
         return
       }
 
-      // /api/enrich returns { profile: ResumeCanonical } via normalizeEnrichLayer()
+      // Successful fetch
       setProfileData(data.profile as ResumeCanonical)
       setIsLoading(false)
     } catch (err) {
@@ -114,32 +113,31 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
     }
   }
 
-  const handleSignOutAndRetry = () => {
-    // Use the server-side signout route to clear the session cleanly,
-    // then land on login — avoids the client-side signOut redirect loop
-    window.location.href = "/auth/signout"
+  const handleViewResume = () => {
+    console.log("[ProfileSnapshotCard] handleViewResume:", {
+      personDataId: personData?.id,
+      hasResume,
+      profileDataExists: !!profileData,
+    })
+
+    // Validate personData.id before navigation
+    if (!personData?.id) {
+      alert("Error: Missing resume data. Try refreshing the page.")
+      console.error("No personData.id is available")
+      return
+    }
+
+    // Navigate to the resume page
+    router.push(`/resume/${personData.id}`)
   }
 
-  const handleViewResume = () => {
-  if (!personData?.id) {
-    console.error("No personData.id available")
-    return
-  }
-  router.push(`/resume/${personData.id}`)
-}
-  // Snapshot from LinkedIn OAuth user_metadata — always available immediately after login.
-  // Falls back to enriched ResumeCanonical fields once enrich completes.
   const displayName = user.user_metadata?.full_name || profileData?.full_name || "User"
   const photoUrl = user.user_metadata?.avatar_url as string | undefined
-  const headline =
-    (user.user_metadata?.headline as string | undefined) ||
-    profileData?.headline ||
-    profileData?.occupation
+  const headline = user.user_metadata?.headline || profileData?.headline || profileData?.occupation
   const email = user.email
-  const location =
-    profileData?.city && profileData?.country
-      ? `${profileData.city}, ${profileData.country}`
-      : profileData?.city || profileData?.country
+  const location = profileData?.city && profileData?.country
+    ? `${profileData.city}, ${profileData.country}`
+    : profileData?.city || profileData?.country
 
   const stats = [
     { icon: Briefcase, label: "Experience", value: profileData?.experiences?.length ?? 0 },
@@ -167,12 +165,7 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                     <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
                       <AvatarImage src={photoUrl} alt={displayName} />
                       <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                        {displayName
-                          .split(" ")
-                          .map((n: string) => n[0])
-                          .join("")
-                          .toUpperCase()
-                          .slice(0, 2)}
+                        {displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                   )}
@@ -212,60 +205,12 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                     className="space-y-3"
                   >
                     <div className="rounded-xl bg-muted/50 p-5 text-center space-y-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <Linkedin className="h-5 w-5 text-[#0A66C2]" />
-                        <span className="text-sm font-medium">Syncing LinkedIn Profile</span>
-                      </div>
                       <Progress value={progress} className="h-2" />
                       <p className="text-xs text-muted-foreground">Importing your professional information...</p>
                     </div>
                   </motion.div>
                 )}
 
-                {error && (
-                  <motion.div
-                    key="error"
-                    variants={itemVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-center"
-                  >
-                    <p className="text-sm font-medium text-destructive">Could not sync profile</p>
-                    <p className="text-xs text-muted-foreground mt-1">Check Vercel logs for details.</p>
-                  </motion.div>
-                )}
-
-                {!isLoading && !error && (hasResume || profileData) && (
-                  <motion.div
-                    key="success"
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="space-y-4"
-                  >
-                    <motion.div variants={itemVariants} className="flex items-center justify-center gap-2 text-primary">
-                      <CheckCircle2 className="h-5 w-5" />
-                      <span className="text-sm font-medium">Profile Synced</span>
-                    </motion.div>
-
-                    {/* Stats Grid */}
-                    <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3">
-                      {stats.map((stat) => (
-                        <motion.div
-                          key={stat.label}
-                          variants={itemVariants}
-                          className="rounded-xl bg-muted/50 p-3 text-center"
-                        >
-                          <stat.icon className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                          <p className="text-xl font-bold">{stat.value}</p>
-                          <p className="text-xs text-muted-foreground">{stat.label}</p>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  </motion.div>
-                )}
-
-                {/* Action buttons — always visible, disabled until profile data is ready */}
                 {!isLoading && !error && (
                   <motion.div variants={itemVariants} className="flex gap-3 pt-2">
                     <Button
@@ -277,25 +222,9 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
                       <FileText className="mr-2 h-5 w-5" />
                       View Resume
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={() => setShowShareDialog(true)}
-                      disabled={!hasResume && !profileData}
-                    >
-                      <Share2 className="h-5 w-5" />
-                    </Button>
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              <motion.div
-                variants={itemVariants}
-                className="flex items-center justify-center gap-2 pt-2 text-xs text-muted-foreground"
-              >
-                <Linkedin className="h-4 w-4 text-[#0A66C2]" />
-                <span>Powered by LinkedIn & EnrichLayer</span>
-              </motion.div>
             </div>
           </CardContent>
         </Card>

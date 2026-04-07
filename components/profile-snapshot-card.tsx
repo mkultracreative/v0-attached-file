@@ -121,9 +121,12 @@ export function ProfileSnapshotCard({ user, hasResume, personData }: ProfileSnap
   }
 
   const handleViewResume = () => {
-    router.push(`/resume/${user.id}`)
+  if (!personData?.id) {
+    console.error("No personData.id available")
+    return
   }
-
+  router.push(`/resume/${personData.id}`)
+}
   // Snapshot from LinkedIn OAuth user_metadata — always available immediately after login.
   // Falls back to enriched ResumeCanonical fields once enrich completes.
   const displayName = user.user_metadata?.full_name || profileData?.full_name || "User"

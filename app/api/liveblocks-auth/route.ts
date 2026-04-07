@@ -2,7 +2,6 @@ import { Liveblocks } from "@liveblocks/node"
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
-// Initialize Liveblocks instance with your secret key
 const liveblocks = new Liveblocks({
   secret: process.env.LIVEBLOCKS_SECRET_KEY!,
 })
@@ -19,10 +18,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Get room ID from the request body
     const { room } = await request.json()
 
-    // Create a Liveblocks session for the current user
+    // Create or fetch the session
     const session = liveblocks.prepareSession(user.id, {
       userInfo: {
         name: user.email?.split("@")[0] || "User",
@@ -31,17 +29,22 @@ export async function POST(request: Request) {
       },
     })
 
-    // Grant full access to the user's personal room
+    // Grant FULL_ACCESS to the user's own room
     session.allow(`resume-${user.id}`, session.FULL_ACCESS)
 
-    // Conditional: Grant read access for other users' resumes
+    // Check permissions for other room (if it's not their own)
     if (room && room !== `resume-${user.id}`) {
       if (room.startsWith("resume-")) {
+        // Add READ_ACCESS for shared rooms
         session.allow(room, session.READ_ACCESS)
+      } else {
+        // Invalid room format; deny access
+        console.error("[Liveblocks Auth] Invalid room format:", room)
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }
 
-    // Perform Liveblocks authorization
+    // Perform session authorization
     const { status, body } = await session.authorize()
     return new Response(body, { status })
   } catch (error) {

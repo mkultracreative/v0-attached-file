@@ -27,8 +27,18 @@ export default async function ResumePage({
     .eq("id", params.id)
     .single<PersonRow>()
 
+  // Debug log
+  console.log("[Resume Page]", {
+    paramsId: params.id,
+    personDataExists: !!personData,
+    error: error?.message,
+    personDataId: personData?.id,
+  })
+
   if (error || !personData) {
-    redirect("/profile")
+    console.error("[Resume Page] Query failed:", error?.message || "No data")
+    // Instead of redirect, throw error so we see what went wrong
+    throw new Error(`Failed to load resume: ${error?.message || "Not found"}`)
   }
 
   // Check if user owns this resume or has access
